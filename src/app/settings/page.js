@@ -5,7 +5,7 @@ import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
 import { auth, db, storage } from '../../../lib/firebase';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 export default function SettingsPage() {
@@ -60,6 +60,29 @@ export default function SettingsPage() {
         photoURL: finalPhotoURL || '',
         updatedAt: new Date().toISOString(),
       });
+
+      // Update references in posts and comments to keep avatars consistent
+      try {
+        const newName = displayName.trim();
+        const newAvatar = finalPhotoURL || '';
+        const postSnap = await getDocs(query(collection(db, 'posts'), where('userId', '==', user.uid)));
+        const commentSnap = await getDocs(query(collection(db, 'comments'), where('userId', '==', user.uid)));
+
+        // Firestore batch limit is 500 ops; chunk if necessary
+        const updates = [
+          ...postSnap.docs.map((d) => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
+          ...commentSnap.docs.map((d) => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
+        ];
+        for (let i = 0; i < updates.length; i += 400) {
+          const batch = writeBatch(db);
+          for (const u of updates.slice(i, i + 400)) {
+            batch.update(u.ref, u.data);
+          }
+          await batch.commit();
+        }
+      } catch (_) {
+        // Non-blocking: if this fails, new posts still show the latest avatar
+      }
 
       await refreshUser();
       router.push('/profile');

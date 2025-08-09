@@ -197,7 +197,7 @@ export default function Feed() {
           </div>
         ) : (
           filteredPosts.map(post => (
-            <div key={post.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
+            <div key={post.id} className="bg-white rounded-xl shadow-sm overflow-hidden ring-1 ring-gray-100 hover:shadow-md transition-shadow">
               {/* Post Header */}
               <div className="flex items-center justify-between p-4">
                 <div className="flex items-center space-x-3">
@@ -223,11 +223,11 @@ export default function Feed() {
               <img
                 src={post.photos[0]}
                 alt="Post"
-                className="w-full h-80 object-cover"
+                className="w-full h-80 object-cover transform-gpu hover:scale-[1.01] transition-transform"
               />
 
               {/* Post Content */}
-              <div className="p-4">
+              <div className="p-5">
                 <p className="text-gray-800 mb-3">{post.caption}</p>
                 
                 {post.location && (
@@ -244,7 +244,7 @@ export default function Feed() {
                 )}
 
                 {/* Actions */}
-                 <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                   <ReactionButtons post={post} />
                   <div className="flex items-center space-x-4">
                     <Link href={`/post/${post.id}`} className="text-indigo-600 hover:underline text-sm">View</Link>

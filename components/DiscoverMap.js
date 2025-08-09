@@ -160,8 +160,12 @@ export default function DiscoverMap() {
             <CircleMarker
               key={`${g.coordinates.latitude}-${g.coordinates.longitude}-${idx}`}
               center={[g.coordinates.latitude, g.coordinates.longitude]}
-              radius={10}
-              pathOptions={{ color: '#4f46e5', fillColor: '#4f46e5', fillOpacity: 0.8 }}
+              radius={12}
+              pathOptions={{
+                color: g.avgRating >= 7 ? '#10b981' : g.avgRating >= 5 ? '#f59e0b' : '#ef4444',
+                fillColor: g.avgRating >= 7 ? '#10b981' : g.avgRating >= 5 ? '#f59e0b' : '#ef4444',
+                fillOpacity: 0.9,
+              }}
             >
               <Tooltip permanent direction="center">{Math.round(g.avgRating)}</Tooltip>
               <Popup>

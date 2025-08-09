@@ -45,15 +45,11 @@ function AuthForm() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-fuchsia-50 flex items-center justify-center">
       <div className="max-w-md w-full space-y-8 px-4">
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-indigo-600 mb-2">
-            Wavelength
-          </h1>
-          <p className="text-gray-600 text-lg">
-            {isLogin ? 'Welcome back!' : 'Join the conversation'}
-          </p>
+          <h1 className="text-5xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 bg-clip-text text-transparent mb-2">Wavelength</h1>
+          <p className="text-gray-600 text-lg">{isLogin ? 'Welcome back!' : 'Join the conversation'}</p>
         </div>
 
         <form onSubmit={handleAuth} className="mt-8 space-y-6">
@@ -100,10 +96,8 @@ function AuthForm() {
           <button
             type="submit"
             disabled={loading}
-            className={`w-full py-3 px-4 rounded-lg text-white font-bold text-lg transition-colors ${
-              loading 
-                ? 'bg-indigo-400 cursor-not-allowed' 
-                : 'bg-indigo-600 hover:bg-indigo-700'
+            className={`w-full py-3 px-4 rounded-lg text-white font-bold text-lg transition ${
+              loading ? 'bg-indigo-400 cursor-not-allowed' : 'bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-600 hover:opacity-95 shadow'
             }`}
           >
             {loading ? 'Loading...' : (isLogin ? 'Login' : 'Sign Up')}
@@ -113,7 +107,7 @@ function AuthForm() {
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
-              className="text-indigo-600 hover:text-indigo-500 transition-colors"
+              className="text-indigo-600 hover:text-indigo-500 transition"
             >
               {isLogin ? "Don't have an account? Sign up" : "Already have an account? Login"}
             </button>
