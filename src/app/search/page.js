@@ -9,7 +9,8 @@ export default function SearchPage() {
   const [term, setTerm] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const { user, followUser, unfollowUser, isFollowing } = useAuth();
+  const { user, followUser, unfollowUser, isFollowing, cancelFollowRequest } = useAuth();
+  const [pendingMap, setPendingMap] = useState({});
 
   const runSearch = async () => {
     if (!term.trim()) {
@@ -58,22 +59,28 @@ export default function SearchPage() {
           {!loading && results.length === 0 && term && (
             <div className="text-center text-gray-600">No users found</div>
           )}
-          {results.map((u) => (
-            <div key={u.id} className="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
-              <a href={`/user/${u.id}`} className="flex items-center gap-3 hover:opacity-90">
-                <img src={u.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt={u.displayName} />
-                <div>
-                  <div className="font-semibold">{u.displayName || 'User'}</div>
-                  <div className="text-xs text-gray-500">Followers: {u.followers?.length || 0}</div>
-                </div>
-              </a>
-              {isFollowing(u.id) ? (
-                <button onClick={() => unfollowUser(u.id)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Unfollow</button>
-              ) : (
-                <button onClick={() => followUser(u.id)} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Follow</button>
-              )}
-            </div>
-          ))}
+          {results.map((u) => {
+            const following = isFollowing(u.id);
+            const pending = pendingMap[u.id];
+            return (
+              <div key={u.id} className="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
+                <a href={`/user/${u.id}`} className="flex items-center gap-3 hover:opacity-90">
+                  <img src={u.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt={u.displayName} />
+                  <div>
+                    <div className="font-semibold">{u.displayName || 'User'}</div>
+                    <div className="text-xs text-gray-500">Followers: {u.followers?.length || 0}</div>
+                  </div>
+                </a>
+                {following ? (
+                  <span className="text-sm text-gray-600">Friends</span>
+                ) : pending ? (
+                  <button onClick={async ()=>{ await cancelFollowRequest(u.id); setPendingMap(m=>({...m,[u.id]:false})); }} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Requested</button>
+                ) : (
+                  <button onClick={async ()=>{ await followUser(u.id); setPendingMap(m=>({...m,[u.id]:true})); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Follow</button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </Layout>
