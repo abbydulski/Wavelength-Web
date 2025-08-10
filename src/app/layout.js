@@ -17,12 +17,17 @@ const geistMono = Geist_Mono({
 export const metadata = {
   title: "Wavelength",
   description: "Share and rate your experiences with friends.",
+  icons: {
+    icon: "/wavelength_logo.svg",
+    shortcut: "/wavelength_logo.svg",
+    apple: "/wavelength_logo.svg",
+  },
   openGraph: {
     title: "Wavelength",
     description: "Friends-first feed. No short-form noise. Discover useful places within 100 miles.",
     images: [
       {
-        url: "/globe.svg",
+        url: "/wavelength_logo.svg",
         width: 1200,
         height: 630,
         alt: "Wavelength",
