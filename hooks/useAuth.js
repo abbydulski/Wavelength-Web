@@ -71,26 +71,23 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Updated: first interaction creates a follow request instead of immediate follow
   const followUser = async (targetUserId) => {
     if (!user || user.uid === targetUserId) return false;
-
     try {
-      // Add targetUserId to current user's following list
-      await updateDoc(doc(db, 'users', user.uid), {
-        following: arrayUnion(targetUserId)
+      // If already following, nothing to do
+      if (user.following?.includes(targetUserId)) return true;
+      // Create request if not already pending
+      const existing = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid), where('toUserId', '==', targetUserId)));
+      if (!existing.empty) return true;
+      await addDoc(collection(db, 'followRequests'), {
+        fromUserId: user.uid,
+        toUserId: targetUserId,
+        createdAt: new Date().toISOString(),
       });
-
-      // Add current user to target user's followers list
-      await updateDoc(doc(db, 'users', targetUserId), {
-        followers: arrayUnion(user.uid)
-      });
-
-      // Refresh current user data to update UI
-      await refreshUser();
-      
       return true;
     } catch (error) {
-      console.error('Error following user:', error);
+      console.error('Error requesting follow:', error);
       return false;
     }
   };
