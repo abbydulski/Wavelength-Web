@@ -27,23 +27,26 @@ export default function CreatePage() {
   const [locating, setLocating] = useState(false);
   const [rating, setRating] = useState(5);
   const [isPublic, setIsPublic] = useState(true);
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]); // up to 3 files
+  const [previews, setPreviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!file) return setError('Please select an image');
+    if (files.length === 0) return setError('Please select at least one image');
     if (!caption.trim()) return setError('Please enter a caption');
     if (!category) return setError('Please select a category');
     setLoading(true);
     try {
-      // Upload image
-      const filename = `posts/${user.uid}/${Date.now()}_${file.name}`;
-      const storageRef = ref(storage, filename);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      // Upload images (up to 3)
+      const uploads = await Promise.all(files.slice(0,3).map(async (f) => {
+        const filename = `posts/${user.uid}/${Date.now()}_${f.name}`;
+        const storageRef = ref(storage, filename);
+        const snap = await uploadBytes(storageRef, f);
+        return await getDownloadURL(snap.ref);
+      }));
 
       // Prepare location fields
       const locationText = selectedPlace?.name || locationQuery.trim();
@@ -61,7 +64,7 @@ export default function CreatePage() {
         coordinates,
         rating,
         category,
-        photos: [downloadURL],
+        photos: uploads,
         isPublic,
         createdAt: new Date().toISOString(),
         agreedBy: [],
@@ -75,7 +78,8 @@ export default function CreatePage() {
       setSelectedPlace(null);
       setRating(5);
       setIsPublic(true);
-      setFile(null);
+      setFiles([]);
+      setPreviews([]);
       alert('Post created!');
     } catch (err) {
       console.error(err);
@@ -93,8 +97,37 @@ export default function CreatePage() {
           {error && <div className="bg-red-100 text-red-700 px-4 py-2 rounded">{error}</div>}
 
           <div>
-            <label className="block text-sm font-medium mb-1">Photo</label>
-            <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <label className="block text-sm font-medium mb-1">Photos (up to 3)</label>
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => {
+                const list = Array.from(e.target.files || []);
+                const limited = list.slice(0, 3);
+                setFiles(limited);
+                setPreviews(limited.map(f => URL.createObjectURL(f)));
+              }}
+            />
+            {previews.length > 0 && (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {previews.map((src, idx) => (
+                  <div key={idx} className="relative w-full aspect-square overflow-hidden rounded border">
+                    <img src={src} alt={`preview-${idx}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 bg-white/80 rounded px-1 text-xs"
+                      onClick={() => {
+                        setFiles(curr => curr.filter((_, i) => i !== idx));
+                        setPreviews(curr => curr.filter((_, i) => i !== idx));
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>

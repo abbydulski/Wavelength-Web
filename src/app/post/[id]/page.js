@@ -102,8 +102,10 @@ export default function PostDetailPage() {
         ) : (
           post && (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <div className="relative w-full h-96">
-                <Image src={post.photos?.[0]} alt="post" fill className="object-cover" sizes="(max-width: 768px) 100vw, 800px" />
+              <div className="relative w-full bg-black">
+                <div className="w-full" style={{position:'relative', paddingTop:'75%'}}>
+                  <Image src={post.photos?.[0]} alt="post" fill className="object-contain bg-black" sizes="(max-width: 768px) 100vw, 800px" />
+                </div>
               </div>
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between">

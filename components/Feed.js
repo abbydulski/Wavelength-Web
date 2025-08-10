@@ -221,15 +221,17 @@ export default function Feed() {
               </div>
 
               {/* Post Image */}
-              <div className="relative w-full h-80">
-                <Image
-                  src={post.photos[0]}
-                  alt="Post"
-                  fill
-                  sizes="(max-width: 768px) 100vw, 800px"
-                  className="object-cover transform-gpu hover:scale-[1.01] transition-transform"
-                  priority={false}
-                />
+              <div className="relative w-full bg-black">
+                <div className="w-full" style={{position:'relative', paddingTop:'75%'}}>
+                  <Image
+                    src={post.photos[0]}
+                    alt="Post"
+                    fill
+                    sizes="(max-width: 768px) 100vw, 800px"
+                    className="object-contain bg-black"
+                    priority={false}
+                  />
+                </div>
               </div>
 
               {/* Post Content */}
