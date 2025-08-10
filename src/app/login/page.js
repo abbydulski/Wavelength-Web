@@ -113,6 +113,9 @@ function AuthForm() {
             </button>
           </div>
         </form>
+        <div className="text-center">
+          <a href="/login/reset" className="text-sm text-indigo-600 hover:underline">Forgot your password?</a>
+        </div>
       </div>
     </div>
   );

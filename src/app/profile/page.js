@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
-import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../../../lib/firebase';
 import Link from 'next/link';
 
@@ -10,6 +10,7 @@ export default function ProfilePage() {
   const { user, deletePost } = useAuth();
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -40,8 +41,38 @@ export default function ProfilePage() {
                 <span>Following: {user?.following?.length || 0}</span>
               </div>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
               <Link href="/settings" className="px-3 py-2 rounded border hover:bg-gray-50">Edit Profile</Link>
+              <button
+                onClick={async () => {
+                  if (!user) return;
+                  setSyncing(true);
+                  try {
+                    const newName = user.displayName || 'User';
+                    const newAvatar = user.photoURL || '';
+                    const postsSnap = await getDocs(query(collection(db, 'posts'), where('userId', '==', user.uid)));
+                    const commentsSnap = await getDocs(query(collection(db, 'comments'), where('userId', '==', user.uid)));
+                    const updates = [
+                      ...postsSnap.docs.map(d => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
+                      ...commentsSnap.docs.map(d => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
+                    ];
+                    for (let i = 0; i < updates.length; i += 400) {
+                      const batch = writeBatch(db);
+                      for (const u of updates.slice(i, i + 400)) batch.update(u.ref, u.data);
+                      await batch.commit();
+                    }
+                    alert('Profile synced to your posts and comments');
+                  } catch (e) {
+                    alert('Failed to sync profile to posts.');
+                  } finally {
+                    setSyncing(false);
+                  }
+                }}
+                disabled={syncing}
+                className={`px-3 py-2 rounded border ${syncing ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}`}
+              >
+                {syncing ? 'Syncing…' : 'Sync Profile to Posts'}
+              </button>
             </div>
           </div>
         </div>

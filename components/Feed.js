@@ -4,6 +4,7 @@ import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase
 import { db } from '../lib/firebase';
 import { useAuth } from '../hooks/useAuth';
 import Link from 'next/link';
+import Image from 'next/image';
 
 // Temporary simple components - we'll make these fancier later
 function RatingDisplay({ rating }) {
@@ -220,11 +221,16 @@ export default function Feed() {
               </div>
 
               {/* Post Image */}
-              <img
-                src={post.photos[0]}
-                alt="Post"
-                className="w-full h-80 object-cover transform-gpu hover:scale-[1.01] transition-transform"
-              />
+              <div className="relative w-full h-80">
+                <Image
+                  src={post.photos[0]}
+                  alt="Post"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 800px"
+                  className="object-cover transform-gpu hover:scale-[1.01] transition-transform"
+                  priority={false}
+                />
+              </div>
 
               {/* Post Content */}
               <div className="p-5">

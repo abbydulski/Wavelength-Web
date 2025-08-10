@@ -1,10 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Layout from '../../../../components/Layout';
 import { db } from '../../../../lib/firebase';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
 import { useAuth } from '../../../../hooks/useAuth';
+import Image from 'next/image';
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -16,6 +17,7 @@ export default function PostDetailPage() {
   const [commentText, setCommentText] = useState('');
   const [commenting, setCommenting] = useState(false);
   const { user, agreeWithPost, disagreeWithPost, removeReaction, getUserReaction, deletePost } = useAuth();
+  const shareUrl = useMemo(() => (typeof window !== 'undefined' ? window.location.href : ''), []);
 
   useEffect(() => {
     if (!id) return;
@@ -98,7 +100,9 @@ export default function PostDetailPage() {
         ) : (
           post && (
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              <img src={post.photos?.[0]} alt="post" className="w-full h-96 object-cover" />
+              <div className="relative w-full h-96">
+                <Image src={post.photos?.[0]} alt="post" fill className="object-cover" sizes="(max-width: 768px) 100vw, 800px" />
+              </div>
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold">{post.username || 'User'}</div>
@@ -108,6 +112,21 @@ export default function PostDetailPage() {
                 {post.location && (
                   <div className="text-sm text-gray-500">📍 {post.location}</div>
                 )}
+                <div className="pt-2 flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      if (navigator?.share) {
+                        try { await navigator.share({ title: 'Wavelength Post', url: shareUrl }); } catch {}
+                      } else {
+                        await navigator.clipboard.writeText(shareUrl);
+                        alert('Link copied');
+                      }
+                    }}
+                    className="text-sm px-3 py-1.5 rounded border hover:bg-gray-50"
+                  >
+                    Share
+                  </button>
+                </div>
 
                 {/* Reactions */}
                 <div className="pt-3 flex items-center gap-3 border-t border-gray-100 mt-2">
