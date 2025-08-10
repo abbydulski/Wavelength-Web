@@ -60,13 +60,13 @@ export default function SearchPage() {
           )}
           {results.map((u) => (
             <div key={u.id} className="bg-white rounded-lg shadow-sm p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <a href={`/user/${u.id}`} className="flex items-center gap-3 hover:opacity-90">
                 <img src={u.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt={u.displayName} />
                 <div>
                   <div className="font-semibold">{u.displayName || 'User'}</div>
                   <div className="text-xs text-gray-500">Followers: {u.followers?.length || 0}</div>
                 </div>
-              </div>
+              </a>
               {isFollowing(u.id) ? (
                 <button onClick={() => unfollowUser(u.id)} className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">Unfollow</button>
               ) : (

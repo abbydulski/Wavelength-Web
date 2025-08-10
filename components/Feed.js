@@ -201,7 +201,7 @@ export default function Feed() {
             <div key={post.id} className="bg-white rounded-xl shadow-sm overflow-hidden ring-1 ring-gray-100 hover:shadow-md transition-shadow">
               {/* Post Header */}
               <div className="flex items-center justify-between p-4">
-                <div className="flex items-center space-x-3">
+                <a href={`/user/${post.userId}`} className="flex items-center space-x-3 hover:opacity-90">
                   <img
                     src={post.userAvatar || 'https://via.placeholder.com/40'}
                     alt={post.username}
@@ -216,7 +216,7 @@ export default function Feed() {
                     </div>
                     <p className="text-sm text-gray-500">{formatTimeAgo(post.createdAt)}</p>
                   </div>
-                </div>
+                </a>
                 <RatingDisplay rating={post.rating} />
               </div>
 
