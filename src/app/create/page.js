@@ -188,6 +188,7 @@ function LocationPicker({
   const [isOpen, setIsOpen] = useState(false);
   const [userLocation, setUserLocation] = useState(null); // { lat, lon }
   const controllerRef = useRef(null);
+  const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   // Try to get user location once to bias results
   useEffect(() => {
@@ -211,7 +212,7 @@ function LocationPicker({
     return `${left},${top},${right},${bottom}`;
   }
 
-  // Debounced search for places via Nominatim
+  // Debounced search for places (Mapbox preferred, Nominatim fallback)
   useEffect(() => {
     const q = locationQuery.trim();
     setIsOpen(!!q);
@@ -224,22 +225,36 @@ function LocationPicker({
     controllerRef.current = controller;
     const id = setTimeout(async () => {
       try {
-        const base = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&q=${encodeURIComponent(q)}`;
-        const nearbyUrl = userLocation
-          ? `${base}&viewbox=${computeViewbox(userLocation.lat, userLocation.lon, 30)}&bounded=1`
-          : base;
-        let res = await fetch(nearbyUrl, { signal: controller.signal, headers: { Accept: 'application/json' } });
-        let data = await res.json();
-        let mapped = (data || []).map((d) => ({ name: d.display_name, lat: d.lat, lon: d.lon }));
-
-        // Fallback: if no nearby matches, try global search
-        if (mapped.length === 0 && userLocation) {
-          res = await fetch(base, { signal: controller.signal, headers: { Accept: 'application/json' } });
-          data = await res.json();
-          mapped = (data || []).map((d) => ({ name: d.display_name, lat: d.lat, lon: d.lon }));
+        let results = [];
+        if (MAPBOX_TOKEN) {
+          const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+          const res = await fetch(url, { signal: controller.signal });
+          if (res.ok) {
+            const data = await res.json();
+            results = (data.features || []).map((f) => ({
+              name: f.place_name,
+              lat: f.center?.[1],
+              lon: f.center?.[0],
+            }));
+          }
+        }
+        if (!MAPBOX_TOKEN || results.length === 0) {
+          // Fallback to Nominatim
+          const base = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&q=${encodeURIComponent(q)}`;
+          const nearbyUrl = userLocation
+            ? `${base}&viewbox=${computeViewbox(userLocation.lat, userLocation.lon, 30)}&bounded=1`
+            : base;
+          let res = await fetch(nearbyUrl, { signal: controller.signal, headers: { Accept: 'application/json' } });
+          let data = await res.json();
+          results = (data || []).map((d) => ({ name: d.display_name, lat: d.lat, lon: d.lon }));
+          if (results.length === 0 && userLocation) {
+            res = await fetch(base, { signal: controller.signal, headers: { Accept: 'application/json' } });
+            data = await res.json();
+            results = (data || []).map((d) => ({ name: d.display_name, lat: d.lat, lon: d.lon }));
+          }
         }
 
-        setLocationSuggestions(mapped);
+        setLocationSuggestions(results);
       } catch (_) {
         // ignore aborts
       }
@@ -309,6 +324,9 @@ function LocationPicker({
                   {s.name}
                 </button>
               ))}
+              {MAPBOX_TOKEN && (
+                <div className="px-3 py-1 border-t text-[11px] text-gray-400">Search by Mapbox</div>
+              )}
             </div>
           )}
         </div>
