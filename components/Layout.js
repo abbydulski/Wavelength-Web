@@ -72,6 +72,7 @@ export default function Layout({ children }) {
               <span className="text-sm">
                 {user.displayName || user.email}
               </span>
+            <Link href="/feedback" className="bg-white/10 text-white hover:bg-white/20 px-3 py-1 rounded-lg text-sm border border-white/20 backdrop-blur transition">Feedback</Link>
               <Link href="/settings" className="bg-white/10 text-white hover:bg-white/20 px-3 py-1 rounded-lg text-sm border border-white/20 backdrop-blur transition">
                 Settings
               </Link>
