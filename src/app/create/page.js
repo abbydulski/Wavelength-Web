@@ -224,17 +224,21 @@ function LocationPicker({
     controllerRef.current = controller;
     const id = setTimeout(async () => {
       try {
-        const base = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(q)}`;
-        const url = userLocation
+        const base = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&q=${encodeURIComponent(q)}`;
+        const nearbyUrl = userLocation
           ? `${base}&viewbox=${computeViewbox(userLocation.lat, userLocation.lon, 30)}&bounded=1`
           : base;
-        const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
-        const data = await res.json();
-        const mapped = (data || []).map((d) => ({
-          name: d.display_name,
-          lat: d.lat,
-          lon: d.lon,
-        }));
+        let res = await fetch(nearbyUrl, { signal: controller.signal, headers: { Accept: 'application/json' } });
+        let data = await res.json();
+        let mapped = (data || []).map((d) => ({ name: d.display_name, lat: d.lat, lon: d.lon }));
+
+        // Fallback: if no nearby matches, try global search
+        if (mapped.length === 0 && userLocation) {
+          res = await fetch(base, { signal: controller.signal, headers: { Accept: 'application/json' } });
+          data = await res.json();
+          mapped = (data || []).map((d) => ({ name: d.display_name, lat: d.lat, lon: d.lon }));
+        }
+
         setLocationSuggestions(mapped);
       } catch (_) {
         // ignore aborts
