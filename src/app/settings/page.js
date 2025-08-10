@@ -5,7 +5,7 @@ import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
 import { auth, db, storage } from '../../../lib/firebase';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, writeBatch, onSnapshot, getDoc } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 export default function SettingsPage() {
@@ -16,8 +16,18 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db, 'followRequests'), where('toUserId', '==', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
-      setIncoming(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsub = onSnapshot(q, async (snap) => {
+      const reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const enriched = await Promise.all(reqs.map(async (r) => {
+        try {
+          const fromSnap = await getDoc(doc(db, 'users', r.fromUserId));
+          const u = fromSnap.data() || {};
+          return { ...r, fromName: u.displayName || 'User', fromPhoto: u.photoURL || '' };
+        } catch {
+          return { ...r, fromName: 'User', fromPhoto: '' };
+        }
+      }));
+      setIncoming(enriched);
     });
     return () => unsub();
   }, [user]);
@@ -143,7 +153,10 @@ export default function SettingsPage() {
             <ul className="space-y-2">
               {incoming.map(r => (
                 <li key={r.id} className="flex items-center justify-between">
-                  <span className="text-sm">Request from {r.fromUserId}</span>
+                  <span className="text-sm flex items-center gap-2">
+                    {r.fromPhoto ? <img src={r.fromPhoto} alt="avatar" className="w-6 h-6 rounded-full" /> : <span>👤</span>}
+                    Request from {r.fromName}
+                  </span>
                   <div className="flex items-center gap-2">
                     <button type="button" onClick={async()=>{ await acceptFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">Accept</button>
                     <button type="button" onClick={async()=>{ await declineFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded border hover:bg-gray-50">Decline</button>

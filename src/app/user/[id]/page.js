@@ -10,7 +10,7 @@ import Link from 'next/link';
 export default function UserProfilePage() {
   const params = useParams();
   const userId = params?.id;
-  const { user: currentUser, followUser, unfollowUser, isFollowing, sendFollowRequest, cancelFollowRequest } = useAuth();
+  const { user: currentUser, isFollowing, sendFollowRequest, cancelFollowRequest } = useAuth();
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,16 +39,7 @@ export default function UserProfilePage() {
   const following = isFollowing(userId);
   const isSelf = currentUser?.uid === userId;
 
-  const toggleFollow = async () => {
-    if (!canFollow || followBusy) return;
-    setFollowBusy(true);
-    try {
-      if (following) await unfollowUser(userId);
-      else await followUser(userId);
-    } finally {
-      setFollowBusy(false);
-    }
-  };
+  // No direct follow; always request first. Unfollow can be restored later if needed.
 
   // Check if there's a pending request from current to viewed user
   useEffect(() => {
@@ -78,7 +69,7 @@ export default function UserProfilePage() {
               {currentUser?.uid === userId ? (
                 <Link href="/profile" className="px-3 py-2 rounded border hover:bg-gray-50">Your Profile</Link>
               ) : following ? (
-                <button onClick={toggleFollow} disabled={followBusy} className={`px-3 py-2 rounded border ${followBusy ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}`}>{followBusy ? 'Unfollowing…' : 'Unfollow'}</button>
+                <span className="text-sm text-gray-600">Friends</span>
               ) : pending ? (
                 <button onClick={async ()=>{ setFollowBusy(true); await cancelFollowRequest(userId); setFollowBusy(false); setPending(false); }} disabled={followBusy} className={`px-3 py-2 rounded border ${followBusy ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}`}>Cancel Request</button>
               ) : (
