@@ -57,15 +57,15 @@ export default function DiscoverMap() {
   const defaultCenter = [39.8283, -98.5795];
 
   const categories = [
-    { id: 'all', name: 'All' },
-    { id: 'food', name: 'Food' },
-    { id: 'travel', name: 'Travel' },
-    { id: 'entertainment', name: 'Fun' },
-    { id: 'shopping', name: 'Shopping' },
-    { id: 'fitness', name: 'Fitness' },
-    { id: 'work', name: 'Work' },
-    { id: 'social', name: 'Social' },
-    { id: 'other', name: 'Other' },
+    { id: 'all', name: 'All', icon: '🏠' },
+    { id: 'food', name: 'Food', icon: '🍽️' },
+    { id: 'travel', name: 'Travel', icon: '✈️' },
+    { id: 'entertainment', name: 'Fun', icon: '🎵' },
+    { id: 'shopping', name: 'Shopping', icon: '🛍️' },
+    { id: 'fitness', name: 'Fitness', icon: '💪' },
+    { id: 'work', name: 'Work', icon: '💼' },
+    { id: 'social', name: 'Social', icon: '👥' },
+    { id: 'other', name: 'Other', icon: '⭐' },
   ];
 
   function haversineMiles(lat1, lon1, lat2, lon2) {
@@ -141,7 +141,8 @@ export default function DiscoverMap() {
                 selectedCategory === c.id ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
               }`}
             >
-              {c.name}
+              <span className="mr-1">{c.icon}</span>
+              <span>{c.name}</span>
             </button>
           ))}
         </div>
