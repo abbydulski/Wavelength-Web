@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Layout from '../../../../components/Layout';
 import { db } from '../../../../lib/firebase';
 import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
@@ -11,6 +11,8 @@ export default function PostDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { id } = params || {};
+  const search = useSearchParams();
+  const isAnon = (search?.get('anon') === '1');
   const [post, setPost] = useState(null);
   const [loading, setLoading] = useState(true);
   const [comments, setComments] = useState([]);
@@ -105,7 +107,7 @@ export default function PostDetailPage() {
               </div>
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold">{post.username || 'User'}</div>
+                  <div className="font-semibold">{isAnon ? 'Anonymous' : (post.username || 'User')}</div>
                   <div className="text-sm">Rating: {post.rating}/10</div>
                 </div>
                 <div className="text-gray-800">{post.caption}</div>

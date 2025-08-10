@@ -174,11 +174,11 @@ export default function DiscoverMap() {
                   <div className="max-h-60 overflow-y-auto space-y-3 pr-2">
                     {g.posts.map((p) => (
                       <div key={p.id} className="border-b pb-2">
-                        <div className="font-semibold text-sm">{p.username || 'User'} • {p.rating}/10</div>
+                        <div className="font-semibold text-sm">Anonymous • {p.rating}/10</div>
                         <div className="text-sm">{p.caption}</div>
                         <div className="text-xs text-gray-500">{p.location}</div>
                         <div className="pt-1">
-                          <Link href={`/post/${p.id}`} className="text-indigo-600 hover:underline text-xs">View post</Link>
+                          <Link href={`/post/${p.id}?anon=1`} className="text-indigo-600 hover:underline text-xs">View post</Link>
                         </div>
                       </div>
                     ))}
