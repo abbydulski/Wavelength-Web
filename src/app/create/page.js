@@ -130,7 +130,7 @@ export default function CreatePage() {
 
           <div className="flex items-center gap-3">
             <input id="public" type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
-            <label htmlFor="public">Public</label>
+            <label htmlFor="public">Public (post will be shown on discover feed as anonymous to users within 100 miles)</label>
           </div>
 
           <button disabled={loading} className={`w-full py-3 rounded text-white font-semibold ${loading ? 'bg-indigo-400' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
