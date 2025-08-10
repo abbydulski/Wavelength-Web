@@ -64,7 +64,7 @@ export default function SearchPage() {
                 <img src={u.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt={u.displayName} />
                 <div>
                   <div className="font-semibold">{u.displayName || 'User'}</div>
-                  <div className="text-sm text-gray-500">{u.email}</div>
+                  <div className="text-xs text-gray-500">Followers: {u.followers?.length || 0}</div>
                 </div>
               </div>
               {isFollowing(u.id) ? (
