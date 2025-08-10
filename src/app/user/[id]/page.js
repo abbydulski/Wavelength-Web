@@ -37,6 +37,7 @@ export default function UserProfilePage() {
 
   const canFollow = currentUser && currentUser.uid !== userId;
   const following = isFollowing(userId);
+  const isSelf = currentUser?.uid === userId;
 
   const toggleFollow = async () => {
     if (!canFollow || followBusy) return;
@@ -91,6 +92,8 @@ export default function UserProfilePage() {
         <div className="space-y-4">
           {loading ? (
             <div className="text-center text-gray-600">Loading…</div>
+          ) : !isSelf && !following ? (
+            <div className="text-center text-gray-600">Posts are hidden until your friend request is accepted.</div>
           ) : posts.length === 0 ? (
             <div className="text-center text-gray-600">No posts yet</div>
           ) : (

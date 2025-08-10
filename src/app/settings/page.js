@@ -10,7 +10,7 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, refreshUser } = useAuth();
+  const { user, refreshUser, acceptFollowRequest, declineFollowRequest } = useAuth();
   const [incoming, setIncoming] = useState([]);
   // Incoming follow requests list
   useEffect(() => {
@@ -145,8 +145,8 @@ export default function SettingsPage() {
                 <li key={r.id} className="flex items-center justify-between">
                   <span className="text-sm">Request from {r.fromUserId}</span>
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={async()=>{ await (await import('../../../hooks/useAuth')).useAuth().acceptFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">Accept</button>
-                    <button type="button" onClick={async()=>{ await (await import('../../../hooks/useAuth')).useAuth().declineFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded border hover:bg-gray-50">Decline</button>
+                    <button type="button" onClick={async()=>{ await acceptFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">Accept</button>
+                    <button type="button" onClick={async()=>{ await declineFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded border hover:bg-gray-50">Decline</button>
                   </div>
                 </li>
               ))}
