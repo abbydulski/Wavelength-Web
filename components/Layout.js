@@ -64,7 +64,7 @@ export default function Layout({ children }) {
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="text-2xl font-bold flex items-center gap-2">
-              <span>🌊</span>
+              <img src="/wavelength_logo.svg" alt="Wavelength logo" className="h-7 w-7" />
               <span>Wavelength</span>
             </Link>
             

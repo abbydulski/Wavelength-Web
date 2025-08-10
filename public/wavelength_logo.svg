@@ -1,0 +1,74 @@
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with blue/purple gradient -->
+  <defs>
+    <radialGradient id="bgGradient" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#4f46e5"/>
+      <stop offset="100%" style="stop-color:#1e1b4b"/>
+    </radialGradient>
+    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#6366f1" stroke-width="0.5" opacity="0.2"/>
+    </pattern>
+  </defs>
+  <circle cx="100" cy="100" r="95" fill="url(#bgGradient)" stroke="#6366f1" stroke-width="2"/>
+  <circle cx="100" cy="100" r="85" fill="url(#grid)" opacity="0.3"/>
+  
+  <!-- Wavelength signals emanating from different locations -->
+  <g opacity="0.8">
+    <!-- Location 1 - top left -->
+    <circle cx="65" cy="65" r="3" fill="#a855f7">
+      <animate attributeName="r" values="3;8;3" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="65" cy="65" r="6" fill="none" stroke="#a855f7" stroke-width="1.5" opacity="0.6">
+      <animate attributeName="r" values="6;15;6" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- Location 2 - center -->
+    <circle cx="100" cy="100" r="4" fill="#3b82f6">
+      <animate attributeName="r" values="4;9;4" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="100" cy="100" r="8" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.7">
+      <animate attributeName="r" values="8;20;8" dur="2.5s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.7;0;0.7" dur="2.5s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- Location 3 - bottom right -->
+    <circle cx="135" cy="135" r="3" fill="#8b5cf6">
+      <animate attributeName="r" values="3;7;3" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="135" cy="135" r="5" fill="none" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5">
+      <animate attributeName="r" values="5;12;5" dur="1.8s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.5;0;0.5" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+  
+  <!-- Connecting wavelengths between locations -->
+  <path d="M65 65 Q82 50 100 100" stroke="#a855f7" stroke-width="2" fill="none" opacity="0.4"/>
+  <path d="M100 100 Q118 118 135 135" stroke="#3b82f6" stroke-width="2" fill="none" opacity="0.4"/>
+  <path d="M65 65 Q100 80 135 135" stroke="#8b5cf6" stroke-width="1.5" fill="none" opacity="0.3"/>
+  
+  <!-- Map pin style indicators -->
+  <g opacity="0.7">
+    <path d="M58 58 Q58 52 65 52 Q72 52 72 58 Q72 62 65 68 Q58 62 58 58 Z" fill="#a855f7"/>
+    <path d="M128 128 Q128 122 135 122 Q142 122 142 128 Q142 132 135 138 Q128 132 128 128 Z" fill="#8b5cf6"/>
+  </g>
+  
+  <!-- Central network hub -->
+  <circle cx="100" cy="100" r="6" fill="#ffffff" opacity="0.9"/>
+  <circle cx="100" cy="100" r="2" fill="#3b82f6"/>
+  
+  <!-- Additional network nodes -->
+  <circle cx="75" cy="120" r="2" fill="#c084fc" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="3s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="120" cy="80" r="2" fill="#60a5fa" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2.5s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="85" cy="75" r="2" fill="#a78bfa" opacity="0.8">
+    <animate attributeName="opacity" values="0.8;0.3;0.8" dur="2.8s" repeatCount="indefinite"/>
+  </circle>
+  
+  <!-- App name -->
+  <text x="100" y="170" font-family="Arial, sans-serif" font-size="18" font-weight="bold" 
+        fill="#ffffff" text-anchor="middle" letter-spacing="1px">WAVELENGTH</text>
+</svg>
