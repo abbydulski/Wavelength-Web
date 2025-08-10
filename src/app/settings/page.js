@@ -5,12 +5,22 @@ import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
 import { auth, db, storage } from '../../../lib/firebase';
 import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
+import { doc, updateDoc, collection, query, where, getDocs, writeBatch, onSnapshot } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user, refreshUser } = useAuth();
+  const [incoming, setIncoming] = useState([]);
+  // Incoming follow requests list
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'followRequests'), where('toUserId', '==', user.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      setIncoming(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [user]);
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [photoURL, setPhotoURL] = useState('');
@@ -126,6 +136,23 @@ export default function SettingsPage() {
             <button type="button" onClick={() => router.push('/profile')} className="px-4 py-2 rounded border hover:bg-gray-50">Cancel</button>
           </div>
         </form>
+
+        {incoming.length > 0 && (
+          <div className="bg-white rounded-lg shadow-sm p-6 mt-6">
+            <h2 className="text-lg font-semibold mb-3">Friend Requests</h2>
+            <ul className="space-y-2">
+              {incoming.map(r => (
+                <li key={r.id} className="flex items-center justify-between">
+                  <span className="text-sm">Request from {r.fromUserId}</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={async()=>{ await (await import('../../../hooks/useAuth')).useAuth().acceptFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded bg-indigo-600 text-white hover:bg-indigo-700">Accept</button>
+                    <button type="button" onClick={async()=>{ await (await import('../../../hooks/useAuth')).useAuth().declineFollowRequest(r.fromUserId); }} className="px-2 py-1 text-xs rounded border hover:bg-gray-50">Decline</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </Layout>
   );

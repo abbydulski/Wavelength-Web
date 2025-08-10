@@ -3,18 +3,19 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Layout from '../../../../components/Layout';
 import { db } from '../../../../lib/firebase';
-import { collection, doc, getDoc, onSnapshot, orderBy, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, orderBy, query, where, getDocs } from 'firebase/firestore';
 import { useAuth } from '../../../../hooks/useAuth';
 import Link from 'next/link';
 
 export default function UserProfilePage() {
   const params = useParams();
   const userId = params?.id;
-  const { user: currentUser, followUser, unfollowUser, isFollowing } = useAuth();
+  const { user: currentUser, followUser, unfollowUser, isFollowing, sendFollowRequest, cancelFollowRequest } = useAuth();
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [followBusy, setFollowBusy] = useState(false);
+  const [pending, setPending] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -48,6 +49,15 @@ export default function UserProfilePage() {
     }
   };
 
+  // Check if there's a pending request from current to viewed user
+  useEffect(() => {
+    if (!currentUser || !userId) return;
+    (async () => {
+      const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', currentUser.uid), where('toUserId', '==', userId)));
+      setPending(!snap.empty);
+    })();
+  }, [currentUser, userId]);
+
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
@@ -66,10 +76,12 @@ export default function UserProfilePage() {
             <div className="ml-auto flex items-center gap-2">
               {currentUser?.uid === userId ? (
                 <Link href="/profile" className="px-3 py-2 rounded border hover:bg-gray-50">Your Profile</Link>
+              ) : following ? (
+                <button onClick={toggleFollow} disabled={followBusy} className={`px-3 py-2 rounded border ${followBusy ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}`}>{followBusy ? 'Unfollowing…' : 'Unfollow'}</button>
+              ) : pending ? (
+                <button onClick={async ()=>{ setFollowBusy(true); await cancelFollowRequest(userId); setFollowBusy(false); setPending(false); }} disabled={followBusy} className={`px-3 py-2 rounded border ${followBusy ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}`}>Cancel Request</button>
               ) : (
-                <button onClick={toggleFollow} disabled={followBusy} className={`px-3 py-2 rounded ${following ? 'border hover:bg-gray-50' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}>
-                  {following ? (followBusy ? 'Unfollowing…' : 'Unfollow') : (followBusy ? 'Following…' : 'Follow')}
-                </button>
+                <button onClick={async ()=>{ setFollowBusy(true); await sendFollowRequest(userId); setFollowBusy(false); setPending(true); }} disabled={followBusy} className={`px-3 py-2 rounded bg-indigo-600 text-white ${followBusy ? '' : 'hover:bg-indigo-700'}`}>Add Friend</button>
               )}
             </div>
           </div>

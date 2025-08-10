@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { useRouter } from 'next/navigation';
 import { auth } from '../lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -11,6 +13,7 @@ export default function Layout({ children }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -20,6 +23,14 @@ export default function Layout({ children }) {
 
     return () => unsubscribe();
   }, []);
+
+  // Listen for incoming follow requests
+  useEffect(() => {
+    if (!user) { setPendingCount(0); return; }
+    const q = query(collection(db, 'followRequests'), where('toUserId', '==', user.uid));
+    const unsub = onSnapshot(q, (snap) => setPendingCount(snap.size));
+    return () => unsub();
+  }, [user]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -64,6 +75,9 @@ export default function Layout({ children }) {
               <Link href="/settings" className="bg-white/10 text-white hover:bg-white/20 px-3 py-1 rounded-lg text-sm border border-white/20 backdrop-blur transition">
                 Settings
               </Link>
+              {pendingCount > 0 && (
+                <span className="text-xs bg-white/20 px-2 py-1 rounded">{pendingCount} request{pendingCount>1?'s':''}</span>
+              )}
               <button
                 onClick={handleLogout}
                 className="bg-white/10 hover:bg-white/20 px-3 py-1 rounded-lg text-sm transition"

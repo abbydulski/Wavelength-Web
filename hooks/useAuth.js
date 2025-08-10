@@ -16,7 +16,10 @@ import {
   arrayRemove, 
   addDoc, 
   collection, 
-  deleteDoc 
+  deleteDoc,
+  getDocs,
+  query,
+  where
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 
@@ -264,7 +267,63 @@ export function AuthProvider({ children }) {
     removeReaction,
     getUserReaction,
     addComment,
-    deletePost
+    deletePost,
+    // Follow request helpers (MVP client-side)
+    sendFollowRequest: async (toUserId) => {
+      if (!user || user.uid === toUserId) return false;
+      try {
+        const existing = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid), where('toUserId', '==', toUserId)));
+        if (!existing.empty) return true;
+        await addDoc(collection(db, 'followRequests'), {
+          fromUserId: user.uid,
+          toUserId,
+          createdAt: new Date().toISOString(),
+        });
+        return true;
+      } catch (e) {
+        console.error('Error sending follow request', e);
+        return false;
+      }
+    },
+    cancelFollowRequest: async (toUserId) => {
+      if (!user) return false;
+      try {
+        const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid), where('toUserId', '==', toUserId)));
+        const batchDeletes = snap.docs.map(d => deleteDoc(d.ref));
+        await Promise.all(batchDeletes);
+        return true;
+      } catch (e) {
+        console.error('Error cancelling follow request', e);
+        return false;
+      }
+    },
+    acceptFollowRequest: async (fromUserId) => {
+      if (!user) return false;
+      try {
+        // Add to following/followers
+        await updateDoc(doc(db, 'users', user.uid), { followers: arrayUnion(fromUserId) });
+        await updateDoc(doc(db, 'users', fromUserId), { following: arrayUnion(user.uid) });
+        // Remove pending request
+        const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', fromUserId), where('toUserId', '==', user.uid)));
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        await refreshUser();
+        return true;
+      } catch (e) {
+        console.error('Error accepting follow request', e);
+        return false;
+      }
+    },
+    declineFollowRequest: async (fromUserId) => {
+      if (!user) return false;
+      try {
+        const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', fromUserId), where('toUserId', '==', user.uid)));
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        return true;
+      } catch (e) {
+        console.error('Error declining follow request', e);
+        return false;
+      }
+    },
   };
 
   return (
