@@ -71,7 +71,7 @@ export default function UserProfilePage() {
               ) : following ? (
                 <span className="text-sm text-gray-600">Friends</span>
               ) : pending ? (
-                <button onClick={async ()=>{ setFollowBusy(true); await cancelFollowRequest(userId); setFollowBusy(false); setPending(false); }} disabled={followBusy} className={`px-3 py-2 rounded border ${followBusy ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}`}>Cancel Request</button>
+                <button disabled className="px-3 py-2 rounded border bg-gray-100 text-gray-500 cursor-default">Requested</button>
               ) : (
                 <button onClick={async ()=>{ setFollowBusy(true); await sendFollowRequest(userId); setFollowBusy(false); setPending(true); }} disabled={followBusy} className={`px-3 py-2 rounded bg-indigo-600 text-white ${followBusy ? '' : 'hover:bg-indigo-700'}`}>Add Friend</button>
               )}
