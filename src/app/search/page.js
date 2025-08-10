@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../../components/Layout';
 import { db } from '../../../lib/firebase';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
 import { useAuth } from '../../../hooks/useAuth';
 
 export default function SearchPage() {
@@ -30,6 +30,21 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  // Live-sync pending requests so results show "Requested" if already sent
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      const map = {};
+      snap.docs.forEach((d) => {
+        const data = d.data();
+        if (data?.toUserId) map[data.toUserId] = true;
+      });
+      setPendingMap(map);
+    });
+    return () => unsub();
+  }, [user]);
 
   return (
     <Layout>
