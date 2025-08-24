@@ -187,6 +187,7 @@ function LocationPicker({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [userLocation, setUserLocation] = useState(null); // { lat, lon }
+  const [localCity, setLocalCity] = useState('');
   const controllerRef = useRef(null);
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -196,6 +197,18 @@ function LocationPicker({
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+        // Try to resolve a nearby city/state once for better brand fallback queries
+        (async () => {
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.coords.latitude}&lon=${pos.coords.longitude}`);
+            const data = await res.json();
+            const city = data?.address?.city || data?.address?.town || data?.address?.village || data?.address?.county || '';
+            const state = data?.address?.state || '';
+            const country = data?.address?.country_code?.toUpperCase() || '';
+            const parts = [city, state || country].filter(Boolean);
+            setLocalCity(parts.join(', '));
+          } catch {}
+        })();
       },
       () => {}
     );
@@ -227,25 +240,42 @@ function LocationPicker({
       try {
         let results = [];
         if (MAPBOX_TOKEN) {
-          // Prefer POIs and places; apply proximity if available
-          const types = 'poi,place,locality,neighborhood,address';
-          const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=${types}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
-          const res = await fetch(url, { signal: controller.signal });
+          // Build bbox around ~100 miles (160km)
+          let bboxParam = '';
+          if (userLocation) {
+            const km = 160;
+            const dLat = km / 111;
+            const dLon = km / (111 * Math.cos((userLocation.lat * Math.PI) / 180));
+            const minLon = userLocation.lon - dLon;
+            const maxLon = userLocation.lon + dLon;
+            const minLat = userLocation.lat - dLat;
+            const maxLat = userLocation.lat + dLat;
+            bboxParam = `&bbox=${minLon},${minLat},${maxLon},${maxLat}`; // minLon,minLat,maxLon,maxLat
+          }
+
+          // Pass 1: strict POIs nearby
+          const url1 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+          let res = await fetch(url1, { signal: controller.signal });
           if (res.ok) {
             const data = await res.json();
-            results = (data.features || []).map((f) => ({
-              name: f.place_name,
-              lat: f.center?.[1],
-              lon: f.center?.[0],
-            }));
+            results = (data.features || []).map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
           }
-          // If brand-like query and nothing found, try without types as a fallback
+          // Pass 2: poi + address
           if (results.length === 0) {
-            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
-            const res2 = await fetch(url2, { signal: controller.signal });
-            if (res2.ok) {
-              const data2 = await res2.json();
+            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+            res = await fetch(url2, { signal: controller.signal });
+            if (res.ok) {
+              const data2 = await res.json();
               results = (data2.features || []).map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
+            }
+          }
+          // Pass 3: brand + city hint
+          if (results.length === 0 && localCity) {
+            const url3 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q + ' ' + localCity)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address`;
+            res = await fetch(url3, { signal: controller.signal });
+            if (res.ok) {
+              const data3 = await res.json();
+              results = (data3.features || []).map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
             }
           }
         }
