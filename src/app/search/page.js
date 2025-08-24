@@ -11,6 +11,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const { user, followUser, unfollowUser, isFollowing, cancelFollowRequest } = useAuth();
   const [pendingMap, setPendingMap] = useState({});
+  const [debounceId, setDebounceId] = useState(null);
 
   const runSearch = async () => {
     if (!term.trim()) {
@@ -30,6 +31,21 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  // Debounced auto-search as you type
+  useEffect(() => {
+    if (debounceId) clearTimeout(debounceId);
+    if (!term || term.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    const id = setTimeout(() => {
+      runSearch();
+    }, 300);
+    setDebounceId(id);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [term]);
 
   // Live-sync pending requests so results show "Requested" if already sent
   useEffect(() => {

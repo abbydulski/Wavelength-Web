@@ -227,7 +227,9 @@ function LocationPicker({
       try {
         let results = [];
         if (MAPBOX_TOKEN) {
-          const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+          // Prefer POIs and places; apply proximity if available
+          const types = 'poi,place,locality,neighborhood,address';
+          const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=${types}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
           const res = await fetch(url, { signal: controller.signal });
           if (res.ok) {
             const data = await res.json();
@@ -236,6 +238,15 @@ function LocationPicker({
               lat: f.center?.[1],
               lon: f.center?.[0],
             }));
+          }
+          // If brand-like query and nothing found, try without types as a fallback
+          if (results.length === 0) {
+            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+            const res2 = await fetch(url2, { signal: controller.signal });
+            if (res2.ok) {
+              const data2 = await res2.json();
+              results = (data2.features || []).map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
+            }
           }
         }
         if (!MAPBOX_TOKEN || results.length === 0) {
