@@ -188,6 +188,7 @@ function LocationPicker({
   const [isOpen, setIsOpen] = useState(false);
   const [userLocation, setUserLocation] = useState(null); // { lat, lon }
   const [localCity, setLocalCity] = useState('');
+  const [localCountry, setLocalCountry] = useState(''); // ISO2 country for Mapbox country filter
   const controllerRef = useRef(null);
   const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
@@ -207,6 +208,7 @@ function LocationPicker({
             const country = data?.address?.country_code?.toUpperCase() || '';
             const parts = [city, state || country].filter(Boolean);
             setLocalCity(parts.join(', '));
+            setLocalCountry(country);
           } catch {}
         })();
       },
@@ -239,6 +241,15 @@ function LocationPicker({
     const id = setTimeout(async () => {
       try {
         let results = [];
+        // Normalize common brand shortcuts
+        const normalizeBrand = (text) => {
+          const t = text.toLowerCase().trim();
+          if (t.startsWith('24 hour')) return '24 Hour Fitness';
+          if (t.includes('24hr')) return '24 Hour Fitness';
+          if (t === 'planet' || t.startsWith('planet fit')) return 'Planet Fitness';
+          return text;
+        };
+        const nq = normalizeBrand(q);
         if (MAPBOX_TOKEN) {
           // Build bbox around ~100 miles (160km)
           let bboxParam = '';
@@ -254,7 +265,7 @@ function LocationPicker({
           }
 
           // Pass 1: strict POIs nearby
-          const url1 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+          const url1 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
           let res = await fetch(url1, { signal: controller.signal });
           if (res.ok) {
             const data = await res.json();
@@ -262,7 +273,7 @@ function LocationPicker({
           }
           // Pass 2: poi + address
           if (results.length === 0) {
-            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}`;
+            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
             res = await fetch(url2, { signal: controller.signal });
             if (res.ok) {
               const data2 = await res.json();
@@ -271,7 +282,7 @@ function LocationPicker({
           }
           // Pass 3: brand + city hint
           if (results.length === 0 && localCity) {
-            const url3 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q + ' ' + localCity)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address`;
+            const url3 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq + ' ' + localCity)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${localCountry ? `&country=${localCountry}` : ''}`;
             res = await fetch(url3, { signal: controller.signal });
             if (res.ok) {
               const data3 = await res.json();
