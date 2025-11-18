@@ -2,9 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
-import { db, storage } from '../../../lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { supabase } from '../../../lib/supabase';
 
 const categories = [
   { id: 'food', name: 'Food' },
@@ -40,12 +38,24 @@ export default function CreatePage() {
     if (!category) return setError('Please select a category');
     setLoading(true);
     try {
-      // Upload images (up to 3)
-      const uploads = await Promise.all(files.slice(0,3).map(async (f) => {
-        const filename = `posts/${user.uid}/${Date.now()}_${f.name}`;
-        const storageRef = ref(storage, filename);
-        const snap = await uploadBytes(storageRef, f);
-        return await getDownloadURL(snap.ref);
+      // Upload images to Supabase Storage (up to 3)
+      const uploads = await Promise.all(files.slice(0,3).map(async (f, idx) => {
+        const filename = `${user.uid}/${Date.now()}_${idx}_${f.name}`;
+        const { data, error } = await supabase.storage
+          .from('posts')
+          .upload(filename, f, {
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (error) throw error;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('posts')
+          .getPublicUrl(filename);
+
+        return publicUrl;
       }));
 
       // Prepare location fields
@@ -54,22 +64,23 @@ export default function CreatePage() {
         ? { latitude: Number(selectedPlace.lat), longitude: Number(selectedPlace.lon) }
         : null;
 
-      // Create Firestore post (schema aligned with mobile)
-      await addDoc(collection(db, 'posts'), {
-        userId: user.uid,
-        username: user.displayName || 'User',
-        userAvatar: user.photoURL || '',
-        caption: caption.trim(),
-        location: locationText,
-        coordinates,
-        rating,
-        category,
-        photos: uploads,
-        isPublic,
-        createdAt: new Date().toISOString(),
-        agreedBy: [],
-        disagreedBy: [],
-      });
+      // Create Supabase post
+      const { error: insertError } = await supabase
+        .from('posts')
+        .insert({
+          user_id: user.uid,
+          username: user.displayName || 'User',
+          user_avatar: user.photoURL || '',
+          caption: caption.trim(),
+          location: locationText,
+          coordinates,
+          rating,
+          category,
+          photos: uploads,
+          is_public: isPublic
+        });
+
+      if (insertError) throw insertError;
 
       // Reset form
       setCaption('');

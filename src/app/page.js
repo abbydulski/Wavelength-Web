@@ -2,13 +2,26 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../components/Layout';
 import Feed from '../../components/Feed';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
 
 export default function Home() {
   const [authed, setAuthed] = useState(false);
-  useEffect(() => onAuthStateChanged(auth, (u)=>setAuthed(!!u)), []);
+
+  useEffect(() => {
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthed(!!session);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setAuthed(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
   return (
     <Layout>
       {authed ? (

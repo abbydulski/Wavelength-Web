@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
-import { collection, query, where, onSnapshot, orderBy, getDocs, writeBatch } from 'firebase/firestore';
-import { db } from '../../../lib/firebase';
+import { supabase } from '../../../lib/supabase';
 import Link from 'next/link';
 
 export default function ProfilePage() {
@@ -14,16 +13,55 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!user) return;
-    const q = query(
-      collection(db, 'posts'),
-      where('userId', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
-    const unsub = onSnapshot(q, (snap) => {
-      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+
+    const fetchPosts = async () => {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', user.uid)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching posts:', error);
+        setLoading(false);
+        return;
+      }
+
+      const transformedPosts = data.map(p => ({
+        id: p.id,
+        userId: p.user_id,
+        username: p.username,
+        userAvatar: p.user_avatar,
+        caption: p.caption,
+        location: p.location,
+        coordinates: p.coordinates,
+        rating: p.rating,
+        category: p.category,
+        photos: p.photos,
+        isPublic: p.is_public,
+        createdAt: p.created_at
+      }));
+
+      setPosts(transformedPosts);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    fetchPosts();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('my-posts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'posts', filter: `user_id=eq.${user.uid}` },
+        () => {
+          fetchPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   return (
@@ -50,17 +88,17 @@ export default function ProfilePage() {
                   try {
                     const newName = user.displayName || 'User';
                     const newAvatar = user.photoURL || '';
-                    const postsSnap = await getDocs(query(collection(db, 'posts'), where('userId', '==', user.uid)));
-                    const commentsSnap = await getDocs(query(collection(db, 'comments'), where('userId', '==', user.uid)));
-                    const updates = [
-                      ...postsSnap.docs.map(d => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
-                      ...commentsSnap.docs.map(d => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
-                    ];
-                    for (let i = 0; i < updates.length; i += 400) {
-                      const batch = writeBatch(db);
-                      for (const u of updates.slice(i, i + 400)) batch.update(u.ref, u.data);
-                      await batch.commit();
-                    }
+
+                    await supabase
+                      .from('posts')
+                      .update({ username: newName, user_avatar: newAvatar })
+                      .eq('user_id', user.uid);
+
+                    await supabase
+                      .from('comments')
+                      .update({ username: newName, user_avatar: newAvatar })
+                      .eq('user_id', user.uid);
+
                     alert('Profile synced to your posts and comments');
                   } catch (e) {
                     alert('Failed to sync profile to posts.');

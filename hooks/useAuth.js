@@ -1,27 +1,6 @@
 'use client'
 import { createContext, useContext, useEffect, useState } from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  updateProfile 
-} from 'firebase/auth';
-import { 
-  doc, 
-  setDoc, 
-  getDoc, 
-  updateDoc, 
-  arrayUnion, 
-  arrayRemove, 
-  addDoc, 
-  collection, 
-  deleteDoc,
-  getDocs,
-  query,
-  where
-} from 'firebase/firestore';
-import { auth, db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext();
 
@@ -34,40 +13,71 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // Get additional user data from Firestore
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        const userData = userDoc.data();
-        
-        setUser({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName,
-          photoURL: user.photoURL,
-          ...userData
-        });
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        loadUserData(session.user.id);
+      } else {
+        setUser(null);
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        await loadUserData(session.user.id);
       } else {
         setUser(null);
       }
       setLoading(false);
     });
 
-    return unsubscribe;
+    return () => subscription.unsubscribe();
   }, []);
 
-  const refreshUser = async () => {
-    if (auth.currentUser) {
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const userData = userDoc.data();
-      
+  const loadUserData = async (userId) => {
+    try {
+      const { data: userData, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) throw error;
+
+      // Get followers and following counts
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', userId);
+
+      const { data: following } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId);
+
       setUser({
-        uid: auth.currentUser.uid,
-        email: auth.currentUser.email,
-        displayName: auth.currentUser.displayName,
-        photoURL: auth.currentUser.photoURL,
-        ...userData
+        uid: userId,
+        email: userData.email,
+        displayName: userData.display_name,
+        photoURL: userData.photo_url,
+        bio: userData.bio,
+        createdAt: userData.created_at,
+        postsCount: userData.posts_count,
+        followers: followers?.map(f => f.follower_id) || [],
+        following: following?.map(f => f.following_id) || []
       });
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      setUser(null);
+    }
+  };
+
+  const refreshUser = async () => {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser) {
+      await loadUserData(authUser.id);
     }
   };
 
@@ -77,14 +87,25 @@ export function AuthProvider({ children }) {
     try {
       // If already following, nothing to do
       if (user.following?.includes(targetUserId)) return true;
+
       // Create request if not already pending
-      const existing = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid), where('toUserId', '==', targetUserId)));
-      if (!existing.empty) return true;
-      await addDoc(collection(db, 'followRequests'), {
-        fromUserId: user.uid,
-        toUserId: targetUserId,
-        createdAt: new Date().toISOString(),
-      });
+      const { data: existing } = await supabase
+        .from('follow_requests')
+        .select('id')
+        .eq('from_user_id', user.uid)
+        .eq('to_user_id', targetUserId)
+        .single();
+
+      if (existing) return true;
+
+      const { error } = await supabase
+        .from('follow_requests')
+        .insert({
+          from_user_id: user.uid,
+          to_user_id: targetUserId
+        });
+
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error requesting follow:', error);
@@ -96,19 +117,18 @@ export function AuthProvider({ children }) {
     if (!user || user.uid === targetUserId) return false;
 
     try {
-      // Remove targetUserId from current user's following list
-      await updateDoc(doc(db, 'users', user.uid), {
-        following: arrayRemove(targetUserId)
-      });
+      // Delete the follow relationship
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('follower_id', user.uid)
+        .eq('following_id', targetUserId);
 
-      // Remove current user from target user's followers list
-      await updateDoc(doc(db, 'users', targetUserId), {
-        followers: arrayRemove(user.uid)
-      });
+      if (error) throw error;
 
       // Refresh current user data to update UI
       await refreshUser();
-      
+
       return true;
     } catch (error) {
       console.error('Error unfollowing user:', error);
@@ -124,12 +144,29 @@ export function AuthProvider({ children }) {
     if (!user) return false;
 
     try {
-      const postRef = doc(db, 'posts', postId);
+      // Get current post
+      const { data: post } = await supabase
+        .from('posts')
+        .select('agreed_by, disagreed_by')
+        .eq('id', postId)
+        .single();
+
+      const agreedBy = post?.agreed_by || [];
+      const disagreedBy = post?.disagreed_by || [];
+
       // Remove from disagree if present, add to agree
-      await updateDoc(postRef, {
-        agreedBy: arrayUnion(user.uid),
-        disagreedBy: arrayRemove(user.uid)
-      });
+      const newAgreedBy = [...agreedBy.filter(id => id !== user.uid), user.uid];
+      const newDisagreedBy = disagreedBy.filter(id => id !== user.uid);
+
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          agreed_by: newAgreedBy,
+          disagreed_by: newDisagreedBy
+        })
+        .eq('id', postId);
+
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error agreeing with post:', error);
@@ -141,12 +178,29 @@ export function AuthProvider({ children }) {
     if (!user) return false;
 
     try {
-      const postRef = doc(db, 'posts', postId);
+      // Get current post
+      const { data: post } = await supabase
+        .from('posts')
+        .select('agreed_by, disagreed_by')
+        .eq('id', postId)
+        .single();
+
+      const agreedBy = post?.agreed_by || [];
+      const disagreedBy = post?.disagreed_by || [];
+
       // Remove from agree if present, add to disagree
-      await updateDoc(postRef, {
-        disagreedBy: arrayUnion(user.uid),
-        agreedBy: arrayRemove(user.uid)
-      });
+      const newAgreedBy = agreedBy.filter(id => id !== user.uid);
+      const newDisagreedBy = [...disagreedBy.filter(id => id !== user.uid), user.uid];
+
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          agreed_by: newAgreedBy,
+          disagreed_by: newDisagreedBy
+        })
+        .eq('id', postId);
+
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error disagreeing with post:', error);
@@ -158,11 +212,25 @@ export function AuthProvider({ children }) {
     if (!user) return false;
 
     try {
-      const postRef = doc(db, 'posts', postId);
-      await updateDoc(postRef, {
-        agreedBy: arrayRemove(user.uid),
-        disagreedBy: arrayRemove(user.uid)
-      });
+      // Get current post
+      const { data: post } = await supabase
+        .from('posts')
+        .select('agreed_by, disagreed_by')
+        .eq('id', postId)
+        .single();
+
+      const agreedBy = post?.agreed_by || [];
+      const disagreedBy = post?.disagreed_by || [];
+
+      const { error } = await supabase
+        .from('posts')
+        .update({
+          agreed_by: agreedBy.filter(id => id !== user.uid),
+          disagreed_by: disagreedBy.filter(id => id !== user.uid)
+        })
+        .eq('id', postId);
+
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error removing reaction:', error);
@@ -172,8 +240,8 @@ export function AuthProvider({ children }) {
 
   const getUserReaction = (post) => {
     if (!user || !post) return null;
-    if (post?.agreedBy?.includes(user.uid)) return 'agree';
-    if (post?.disagreedBy?.includes(user.uid)) return 'disagree';
+    if (post?.agreed_by?.includes(user.uid)) return 'agree';
+    if (post?.disagreed_by?.includes(user.uid)) return 'disagree';
     return null;
   };
 
@@ -181,16 +249,17 @@ export function AuthProvider({ children }) {
     if (!user || !commentText.trim()) return false;
 
     try {
-      const comment = {
-        postId,
-        userId: user.uid,
-        username: user.displayName || 'User',
-        userAvatar: user.photoURL || '',
-        text: commentText.trim(),
-        createdAt: new Date().toISOString(),
-      };
+      const { error } = await supabase
+        .from('comments')
+        .insert({
+          post_id: postId,
+          user_id: user.uid,
+          username: user.displayName || 'User',
+          user_avatar: user.photoURL || '',
+          text: commentText.trim()
+        });
 
-      await addDoc(collection(db, 'comments'), comment);
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error adding comment:', error);
@@ -202,7 +271,13 @@ export function AuthProvider({ children }) {
     if (!user) return false;
 
     try {
-      await deleteDoc(doc(db, 'posts', postId));
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId)
+        .eq('user_id', user.uid);
+
+      if (error) throw error;
       return true;
     } catch (error) {
       console.error('Error deleting post:', error);
@@ -212,21 +287,20 @@ export function AuthProvider({ children }) {
 
   const signup = async (email, password, displayName) => {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(result.user, { displayName });
-      
-      // Create user document in Firestore
-      await setDoc(doc(db, 'users', result.user.uid), {
-        displayName,
+      const { data, error } = await supabase.auth.signUp({
         email,
-        createdAt: new Date().toISOString(),
-        bio: '',
-        followers: [],
-        following: [],
-        postsCount: 0
+        password,
+        options: {
+          data: {
+            display_name: displayName
+          }
+        }
       });
-      
-      return result.user;
+
+      if (error) throw error;
+
+      // User profile is created automatically via database trigger
+      return data.user;
     } catch (error) {
       throw error;
     }
@@ -234,8 +308,13 @@ export function AuthProvider({ children }) {
 
   const login = async (email, password) => {
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
-      return result.user;
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) throw error;
+      return data.user;
     } catch (error) {
       throw error;
     }
@@ -243,7 +322,8 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      await signOut(auth);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     } catch (error) {
       throw error;
     }
@@ -269,13 +349,23 @@ export function AuthProvider({ children }) {
     sendFollowRequest: async (toUserId) => {
       if (!user || user.uid === toUserId) return false;
       try {
-        const existing = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid), where('toUserId', '==', toUserId)));
-        if (!existing.empty) return true;
-        await addDoc(collection(db, 'followRequests'), {
-          fromUserId: user.uid,
-          toUserId,
-          createdAt: new Date().toISOString(),
-        });
+        const { data: existing } = await supabase
+          .from('follow_requests')
+          .select('id')
+          .eq('from_user_id', user.uid)
+          .eq('to_user_id', toUserId)
+          .single();
+
+        if (existing) return true;
+
+        const { error } = await supabase
+          .from('follow_requests')
+          .insert({
+            from_user_id: user.uid,
+            to_user_id: toUserId
+          });
+
+        if (error) throw error;
         return true;
       } catch (e) {
         console.error('Error sending follow request', e);
@@ -285,9 +375,13 @@ export function AuthProvider({ children }) {
     cancelFollowRequest: async (toUserId) => {
       if (!user) return false;
       try {
-        const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid), where('toUserId', '==', toUserId)));
-        const batchDeletes = snap.docs.map(d => deleteDoc(d.ref));
-        await Promise.all(batchDeletes);
+        const { error } = await supabase
+          .from('follow_requests')
+          .delete()
+          .eq('from_user_id', user.uid)
+          .eq('to_user_id', toUserId);
+
+        if (error) throw error;
         return true;
       } catch (e) {
         console.error('Error cancelling follow request', e);
@@ -297,12 +391,25 @@ export function AuthProvider({ children }) {
     acceptFollowRequest: async (fromUserId) => {
       if (!user) return false;
       try {
-        // Add to following/followers
-        await updateDoc(doc(db, 'users', user.uid), { followers: arrayUnion(fromUserId) });
-        await updateDoc(doc(db, 'users', fromUserId), { following: arrayUnion(user.uid) });
+        // Add to follows table
+        const { error: followError } = await supabase
+          .from('follows')
+          .insert({
+            follower_id: fromUserId,
+            following_id: user.uid
+          });
+
+        if (followError) throw followError;
+
         // Remove pending request
-        const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', fromUserId), where('toUserId', '==', user.uid)));
-        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        const { error: deleteError } = await supabase
+          .from('follow_requests')
+          .delete()
+          .eq('from_user_id', fromUserId)
+          .eq('to_user_id', user.uid);
+
+        if (deleteError) throw deleteError;
+
         await refreshUser();
         return true;
       } catch (e) {
@@ -313,8 +420,13 @@ export function AuthProvider({ children }) {
     declineFollowRequest: async (fromUserId) => {
       if (!user) return false;
       try {
-        const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', fromUserId), where('toUserId', '==', user.uid)));
-        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+        const { error } = await supabase
+          .from('follow_requests')
+          .delete()
+          .eq('from_user_id', fromUserId)
+          .eq('to_user_id', user.uid);
+
+        if (error) throw error;
         return true;
       } catch (e) {
         console.error('Error declining follow request', e);

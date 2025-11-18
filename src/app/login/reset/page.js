@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react';
 import Layout from '../../../../components/Layout';
-import { auth } from '../../../../lib/firebase';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { supabase } from '../../../../lib/supabase';
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState('');
@@ -16,10 +15,14 @@ export default function ResetPasswordPage() {
     if (!email) return setError('Enter your email');
     setLoading(true);
     try {
-      await sendPasswordResetEmail(auth, email);
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login/update-password`,
+      });
+
+      if (resetError) throw resetError;
       setSent(true);
     } catch (e) {
-      setError(e.message);
+      setError(e.message || 'Failed to send reset email');
     } finally {
       setLoading(false);
     }

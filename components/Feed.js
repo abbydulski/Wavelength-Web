@@ -1,7 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -115,25 +114,61 @@ export default function Feed() {
   useEffect(() => {
     if (!user) return;
 
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allPosts = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      // Filter to show only posts from friends (people you follow) + your own posts
-      const friendsPosts = allPosts.filter(post => {
-        return post.userId === user.uid || // Your own posts
-               (user.following && user.following.includes(post.userId)); // Friends' posts
-      });
-      
-      setPosts(friendsPosts);
-      setLoading(false);
-    });
+    const fetchPosts = async () => {
+      try {
+        // Get posts from user and people they follow
+        const userIds = [user.uid, ...(user.following || [])];
 
-    return unsubscribe;
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .in('user_id', userIds)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Transform to match expected format
+        const transformedPosts = data.map(post => ({
+          id: post.id,
+          userId: post.user_id,
+          username: post.username,
+          userAvatar: post.user_avatar,
+          caption: post.caption,
+          location: post.location,
+          coordinates: post.coordinates,
+          rating: post.rating,
+          category: post.category,
+          photos: post.photos,
+          isPublic: post.is_public,
+          createdAt: post.created_at,
+          agreedBy: post.agreed_by || [],
+          disagreedBy: post.disagreed_by || []
+        }));
+
+        setPosts(transformedPosts);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error fetching posts:', error);
+        setLoading(false);
+      }
+    };
+
+    fetchPosts();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('posts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'posts' },
+        () => {
+          fetchPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const filteredPosts = selectedCategory === 'all' 

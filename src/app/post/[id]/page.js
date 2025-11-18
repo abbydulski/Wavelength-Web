@@ -2,8 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Layout from '../../../../components/Layout';
-import { db } from '../../../../lib/firebase';
-import { doc, getDoc, collection, query, where, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
+import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../hooks/useAuth';
 import Image from 'next/image';
 
@@ -25,12 +24,37 @@ export default function PostDetailPage() {
     if (!id) return;
     (async () => {
       try {
-        const snap = await getDoc(doc(db, 'posts', id));
-        if (!snap.exists()) {
+        const { data, error } = await supabase
+          .from('posts')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (error || !data) {
           router.replace('/');
           return;
         }
-        setPost({ id: snap.id, ...snap.data() });
+
+        // Transform to expected format
+        setPost({
+          id: data.id,
+          userId: data.user_id,
+          username: data.username,
+          userAvatar: data.user_avatar,
+          caption: data.caption,
+          location: data.location,
+          coordinates: data.coordinates,
+          rating: data.rating,
+          category: data.category,
+          photos: data.photos,
+          isPublic: data.is_public,
+          createdAt: data.created_at,
+          agreedBy: data.agreed_by || [],
+          disagreedBy: data.disagreed_by || []
+        });
+      } catch (error) {
+        console.error('Error fetching post:', error);
+        router.replace('/');
       } finally {
         setLoading(false);
       }
@@ -39,11 +63,48 @@ export default function PostDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    const q = query(collection(db, 'comments'), where('postId', '==', id), orderBy('createdAt', 'asc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setComments(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
+
+    const fetchComments = async () => {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('post_id', id)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching comments:', error);
+        return;
+      }
+
+      const transformedComments = data.map(c => ({
+        id: c.id,
+        postId: c.post_id,
+        userId: c.user_id,
+        username: c.username,
+        userAvatar: c.user_avatar,
+        text: c.text,
+        createdAt: c.created_at
+      }));
+
+      setComments(transformedComments);
+    };
+
+    fetchComments();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('comments-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'comments', filter: `post_id=eq.${id}` },
+        () => {
+          fetchComments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
   const userReaction = getUserReaction(post);

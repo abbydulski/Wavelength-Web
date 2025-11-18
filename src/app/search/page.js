@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react';
 import Layout from '../../../components/Layout';
-import { db } from '../../../lib/firebase';
-import { collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../hooks/useAuth';
 
 export default function SearchPage() {
@@ -20,13 +19,28 @@ export default function SearchPage() {
     }
     setLoading(true);
     try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('displayName', '>=', term), where('displayName', '<=', term + '\uf8ff'));
-      const snapshot = await getDocs(q);
-      const users = snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() }))
-        .filter(u => u.id !== user?.uid);
-      setResults(users);
+      // Search users by display name (case-insensitive)
+      const { data: users, error } = await supabase
+        .from('users')
+        .select('*')
+        .ilike('display_name', `%${term}%`)
+        .neq('id', user?.uid || '')
+        .limit(20);
+
+      if (error) throw error;
+
+      const transformedUsers = users.map(u => ({
+        id: u.id,
+        displayName: u.display_name,
+        photoURL: u.photo_url,
+        bio: u.bio,
+        followers: [], // We'll get counts separately if needed
+        following: []
+      }));
+
+      setResults(transformedUsers);
+    } catch (error) {
+      console.error('Error searching users:', error);
     } finally {
       setLoading(false);
     }
@@ -50,16 +64,35 @@ export default function SearchPage() {
   // Live-sync pending requests so results show "Requested" if already sent
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'followRequests'), where('fromUserId', '==', user.uid));
-    const unsub = onSnapshot(q, (snap) => {
+
+    const fetchPending = async () => {
+      const { data: requests } = await supabase
+        .from('follow_requests')
+        .select('to_user_id')
+        .eq('from_user_id', user.uid);
+
       const map = {};
-      snap.docs.forEach((d) => {
-        const data = d.data();
-        if (data?.toUserId) map[data.toUserId] = true;
+      requests?.forEach(r => {
+        map[r.to_user_id] = true;
       });
       setPendingMap(map);
-    });
-    return () => unsub();
+    };
+
+    fetchPending();
+
+    const channel = supabase
+      .channel('my-follow-requests')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'follow_requests', filter: `from_user_id=eq.${user.uid}` },
+        () => {
+          fetchPending();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   return (

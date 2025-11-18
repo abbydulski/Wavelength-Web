@@ -1,8 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 
 const MapContainer = dynamic(() => import('react-leaflet').then(m => m.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(m => m.TileLayer), { ssr: false });
@@ -21,15 +20,58 @@ export default function DiscoverMap() {
   const [locError, setLocError] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'posts'), where('isPublic', '==', true));
-    const unsub = onSnapshot(q, (snap) => {
-      const withCoords = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+    const fetchPosts = async () => {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('is_public', true);
+
+      if (error) {
+        console.error('Error fetching posts:', error);
+        setLoading(false);
+        return;
+      }
+
+      // Transform and filter posts with coordinates
+      const withCoords = data
+        .map(p => ({
+          id: p.id,
+          userId: p.user_id,
+          username: p.username,
+          userAvatar: p.user_avatar,
+          caption: p.caption,
+          location: p.location,
+          coordinates: p.coordinates,
+          rating: p.rating,
+          category: p.category,
+          photos: p.photos,
+          isPublic: p.is_public,
+          createdAt: p.created_at,
+          agreedBy: p.agreed_by || [],
+          disagreedBy: p.disagreed_by || []
+        }))
         .filter(p => p.coordinates && typeof p.coordinates.latitude === 'number' && typeof p.coordinates.longitude === 'number');
+
       setPosts(withCoords);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    fetchPosts();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('public-posts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'posts', filter: 'is_public=eq.true' },
+        () => {
+          fetchPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Ask for user's location (for 100-mile radius filter)

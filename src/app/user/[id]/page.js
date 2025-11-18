@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Layout from '../../../../components/Layout';
-import { db } from '../../../../lib/firebase';
-import { collection, doc, getDoc, onSnapshot, orderBy, query, where, getDocs } from 'firebase/firestore';
+import { supabase } from '../../../../lib/supabase';
 import { useAuth } from '../../../../hooks/useAuth';
 import Link from 'next/link';
 
@@ -20,33 +19,108 @@ export default function UserProfilePage() {
   useEffect(() => {
     if (!userId) return;
     (async () => {
-      const snap = await getDoc(doc(db, 'users', userId));
-      if (snap.exists()) setProfile({ id: snap.id, ...snap.data() });
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user:', error);
+        return;
+      }
+
+      // Get follower/following counts
+      const { data: followers } = await supabase
+        .from('follows')
+        .select('follower_id')
+        .eq('following_id', userId);
+
+      const { data: following } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId);
+
+      setProfile({
+        id: data.id,
+        displayName: data.display_name,
+        email: data.email,
+        bio: data.bio,
+        photoURL: data.photo_url,
+        followers: followers?.map(f => f.follower_id) || [],
+        following: following?.map(f => f.following_id) || []
+      });
     })();
   }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
-    const q = query(collection(db, 'posts'), where('userId', '==', userId), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setPosts(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+    const fetchPosts = async () => {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching posts:', error);
+        setLoading(false);
+        return;
+      }
+
+      const transformedPosts = data.map(p => ({
+        id: p.id,
+        userId: p.user_id,
+        username: p.username,
+        userAvatar: p.user_avatar,
+        caption: p.caption,
+        location: p.location,
+        coordinates: p.coordinates,
+        rating: p.rating,
+        category: p.category,
+        photos: p.photos,
+        isPublic: p.is_public,
+        createdAt: p.created_at
+      }));
+
+      setPosts(transformedPosts);
       setLoading(false);
-    });
-    return () => unsub();
+    };
+
+    fetchPosts();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('user-posts-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'posts', filter: `user_id=eq.${userId}` },
+        () => {
+          fetchPosts();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [userId]);
 
   const canFollow = currentUser && currentUser.uid !== userId;
   const following = isFollowing(userId);
   const isSelf = currentUser?.uid === userId;
 
-  // No direct follow; always request first. Unfollow can be restored later if needed.
-
   // Check if there's a pending request from current to viewed user
   useEffect(() => {
     if (!currentUser || !userId) return;
     (async () => {
-      const snap = await getDocs(query(collection(db, 'followRequests'), where('fromUserId', '==', currentUser.uid), where('toUserId', '==', userId)));
-      setPending(!snap.empty);
+      const { data } = await supabase
+        .from('follow_requests')
+        .select('id')
+        .eq('from_user_id', currentUser.uid)
+        .eq('to_user_id', userId);
+
+      setPending(data && data.length > 0);
     })();
   }, [currentUser, userId]);
 

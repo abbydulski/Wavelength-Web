@@ -1,11 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { useRouter } from 'next/navigation';
-import { auth } from '../lib/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { usePathname } from 'next/navigation';
 
 export default function Layout({ children }) {
@@ -16,26 +13,67 @@ export default function Layout({ children }) {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user || null);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   // Listen for incoming follow requests
   useEffect(() => {
-    if (!user) { setPendingCount(0); return; }
-    const q = query(collection(db, 'followRequests'), where('toUserId', '==', user.uid));
-    const unsub = onSnapshot(q, (snap) => setPendingCount(snap.size));
-    return () => unsub();
+    if (!user) {
+      setPendingCount(0);
+      return;
+    }
+
+    const fetchPendingCount = async () => {
+      const { data, error } = await supabase
+        .from('follow_requests')
+        .select('id', { count: 'exact' })
+        .eq('to_user_id', user.id);
+
+      if (!error) {
+        setPendingCount(data?.length || 0);
+      }
+    };
+
+    fetchPendingCount();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('follow-requests-count')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'follow_requests', filter: `to_user_id=eq.${user.id}` },
+        () => {
+          fetchPendingCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     router.push('/login');
   };
+
+  // Redirect unauthenticated users to /login
+  useEffect(() => {
+    if (!loading && !user && typeof window !== 'undefined') {
+      router.replace('/login');
+    }
+  }, [loading, user, router]);
 
   if (loading) {
     return (
@@ -45,11 +83,7 @@ export default function Layout({ children }) {
     );
   }
 
-  // Redirect unauthenticated users to /login
   if (!user) {
-    if (typeof window !== 'undefined') {
-      router.replace('/login');
-    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-gray-600">Redirecting to login…</div>

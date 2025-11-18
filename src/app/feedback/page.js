@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react';
 import Layout from '../../../components/Layout';
-import { db } from '../../../lib/firebase';
-import { addDoc, collection } from 'firebase/firestore';
+import { supabase } from '../../../lib/supabase';
 
 export default function FeedbackPage() {
   const [text, setText] = useState('');
@@ -16,13 +15,20 @@ export default function FeedbackPage() {
     if (!text.trim()) return setError('Please enter feedback');
     setLoading(true);
     try {
-      await addDoc(collection(db, 'feedback'), {
-        text: text.trim(),
-        createdAt: new Date().toISOString(),
-      });
+      // Note: You'll need to create a 'feedback' table in Supabase
+      // For now, this will fail gracefully - you can create the table later
+      const { error: insertError } = await supabase
+        .from('feedback')
+        .insert({
+          text: text.trim()
+        });
+
+      if (insertError) throw insertError;
+
       setSent(true);
       setText('');
     } catch (e) {
+      console.error('Feedback error:', e);
       setError('Failed to send feedback');
     } finally {
       setLoading(false);

@@ -3,33 +3,63 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Layout from '../../../components/Layout';
 import { useAuth } from '../../../hooks/useAuth';
-import { auth, db, storage } from '../../../lib/firebase';
-import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc, collection, query, where, getDocs, writeBatch, onSnapshot, getDoc } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { supabase } from '../../../lib/supabase';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user, refreshUser, acceptFollowRequest, declineFollowRequest } = useAuth();
   const [incoming, setIncoming] = useState([]);
+
   // Incoming follow requests list
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, 'followRequests'), where('toUserId', '==', user.uid));
-    const unsub = onSnapshot(q, async (snap) => {
-      const reqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const enriched = await Promise.all(reqs.map(async (r) => {
-        try {
-          const fromSnap = await getDoc(doc(db, 'users', r.fromUserId));
-          const u = fromSnap.data() || {};
-          return { ...r, fromName: u.displayName || 'User', fromPhoto: u.photoURL || '' };
-        } catch {
-          return { ...r, fromName: 'User', fromPhoto: '' };
-        }
+
+    const fetchRequests = async () => {
+      const { data: requests, error } = await supabase
+        .from('follow_requests')
+        .select(`
+          id,
+          from_user_id,
+          created_at,
+          users!follow_requests_from_user_id_fkey (
+            display_name,
+            photo_url
+          )
+        `)
+        .eq('to_user_id', user.uid);
+
+      if (error) {
+        console.error('Error fetching requests:', error);
+        return;
+      }
+
+      const enriched = requests.map(r => ({
+        id: r.id,
+        fromUserId: r.from_user_id,
+        fromName: r.users?.display_name || 'User',
+        fromPhoto: r.users?.photo_url || '',
+        createdAt: r.created_at
       }));
+
       setIncoming(enriched);
-    });
-    return () => unsub();
+    };
+
+    fetchRequests();
+
+    // Subscribe to realtime changes
+    const channel = supabase
+      .channel('follow-requests-changes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'follow_requests', filter: `to_user_id=eq.${user.uid}` },
+        () => {
+          fetchRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -61,45 +91,61 @@ export default function SettingsPage() {
     try {
       let finalPhotoURL = photoURL;
       if (file) {
-        const filename = `profiles/${user.uid}/avatar_${Date.now()}_${file.name}`;
-        const storageRef = ref(storage, filename);
-        const snap = await uploadBytes(storageRef, file);
-        finalPhotoURL = await getDownloadURL(snap.ref);
+        const filename = `${user.uid}/avatar_${Date.now()}_${file.name}`;
+        const { data, error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(filename, file, {
+            cacheControl: '3600',
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(filename);
+
+        finalPhotoURL = publicUrl;
       }
 
-      // Update Auth profile
-      await updateProfile(auth.currentUser, {
-        displayName: displayName.trim(),
-        photoURL: finalPhotoURL || null,
+      // Update user profile in database
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({
+          display_name: displayName.trim(),
+          bio: bio.trim(),
+          photo_url: finalPhotoURL || '',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.uid);
+
+      if (updateError) throw updateError;
+
+      // Update auth metadata
+      const { error: authError } = await supabase.auth.updateUser({
+        data: {
+          display_name: displayName.trim(),
+          photo_url: finalPhotoURL || ''
+        }
       });
 
-      // Update Firestore user document
-      await updateDoc(doc(db, 'users', user.uid), {
-        displayName: displayName.trim(),
-        bio: bio.trim(),
-        photoURL: finalPhotoURL || '',
-        updatedAt: new Date().toISOString(),
-      });
+      if (authError) throw authError;
 
       // Update references in posts and comments to keep avatars consistent
       try {
         const newName = displayName.trim();
         const newAvatar = finalPhotoURL || '';
-        const postSnap = await getDocs(query(collection(db, 'posts'), where('userId', '==', user.uid)));
-        const commentSnap = await getDocs(query(collection(db, 'comments'), where('userId', '==', user.uid)));
 
-        // Firestore batch limit is 500 ops; chunk if necessary
-        const updates = [
-          ...postSnap.docs.map((d) => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
-          ...commentSnap.docs.map((d) => ({ ref: d.ref, data: { username: newName, userAvatar: newAvatar } })),
-        ];
-        for (let i = 0; i < updates.length; i += 400) {
-          const batch = writeBatch(db);
-          for (const u of updates.slice(i, i + 400)) {
-            batch.update(u.ref, u.data);
-          }
-          await batch.commit();
-        }
+        await supabase
+          .from('posts')
+          .update({ username: newName, user_avatar: newAvatar })
+          .eq('user_id', user.uid);
+
+        await supabase
+          .from('comments')
+          .update({ username: newName, user_avatar: newAvatar })
+          .eq('user_id', user.uid);
       } catch (_) {
         // Non-blocking: if this fails, new posts still show the latest avatar
       }
