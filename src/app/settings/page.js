@@ -79,6 +79,19 @@ export default function SettingsPage() {
 
   const handleChooseFile = () => fileInputRef.current?.click();
 
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      // Show preview immediately
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoURL(reader.result);
+      };
+      reader.readAsDataURL(selectedFile);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setError('');
@@ -91,6 +104,7 @@ export default function SettingsPage() {
     try {
       let finalPhotoURL = photoURL;
       if (file) {
+        console.log('Uploading file...', file.name);
         const filename = `${user.uid}/avatar_${Date.now()}_${file.name}`;
         const { data, error: uploadError } = await supabase.storage
           .from('avatars')
@@ -99,16 +113,22 @@ export default function SettingsPage() {
             upsert: true
           });
 
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error('Upload error:', uploadError);
+          throw uploadError;
+        }
 
+        console.log('Upload successful, getting public URL...');
         // Get public URL
         const { data: { publicUrl } } = supabase.storage
           .from('avatars')
           .getPublicUrl(filename);
 
+        console.log('Public URL:', publicUrl);
         finalPhotoURL = publicUrl;
       }
 
+      console.log('Updating user profile in database...');
       // Update user profile in database
       const { error: updateError } = await supabase
         .from('users')
@@ -120,8 +140,12 @@ export default function SettingsPage() {
         })
         .eq('id', user.uid);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('Database update error:', updateError);
+        throw updateError;
+      }
 
+      console.log('Updating auth metadata...');
       // Update auth metadata
       const { error: authError } = await supabase.auth.updateUser({
         data: {
@@ -130,9 +154,13 @@ export default function SettingsPage() {
         }
       });
 
-      if (authError) throw authError;
+      if (authError) {
+        console.error('Auth update error:', authError);
+        throw authError;
+      }
 
       // Update references in posts and comments to keep avatars consistent
+      console.log('Updating posts and comments...');
       try {
         const newName = displayName.trim();
         const newAvatar = finalPhotoURL || '';
@@ -146,13 +174,24 @@ export default function SettingsPage() {
           .from('comments')
           .update({ username: newName, user_avatar: newAvatar })
           .eq('user_id', user.uid);
-      } catch (_) {
+      } catch (updateErr) {
+        console.warn('Non-critical: Failed to update posts/comments:', updateErr);
         // Non-blocking: if this fails, new posts still show the latest avatar
       }
 
+      console.log('Refreshing user data...');
       await refreshUser();
-      router.push('/profile');
+
+      // Update local state immediately for instant feedback
+      setPhotoURL(finalPhotoURL);
+
+      console.log('Profile saved successfully! Redirecting...');
+      // Small delay to ensure state updates
+      setTimeout(() => {
+        router.push('/profile');
+      }, 500);
     } catch (err) {
+      console.error('Save error:', err);
       setError(err.message || 'Failed to save changes');
     } finally {
       setSaving(false);
@@ -172,7 +211,7 @@ export default function SettingsPage() {
               <button type="button" onClick={handleChooseFile} className="px-3 py-2 border rounded hover:bg-gray-50">Change Photo</button>
               {file && <span className="text-sm text-gray-600">{file.name}</span>}
             </div>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
           </div>
 
           <div>
