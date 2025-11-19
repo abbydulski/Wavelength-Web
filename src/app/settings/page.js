@@ -106,8 +106,9 @@ export default function SettingsPage() {
     try {
       let finalPhotoURL = photoURL;
       if (file) {
-        console.log('Uploading file...', file.name);
+        console.log('🔵 Step 1: Uploading file...', file.name);
         const filename = `${user.uid}/avatar_${Date.now()}_${file.name}`;
+
         const { data, error: uploadError } = await supabase.storage
           .from('avatars')
           .upload(filename, file, {
@@ -116,21 +117,22 @@ export default function SettingsPage() {
           });
 
         if (uploadError) {
-          console.error('Upload error:', uploadError);
-          throw uploadError;
+          console.error('❌ Upload error:', uploadError);
+          throw new Error(`Upload failed: ${uploadError.message}`);
         }
 
-        console.log('Upload successful, getting public URL...');
+        console.log('✅ Step 2: Upload successful! Data:', data);
+
         // Get public URL
-        const { data: { publicUrl } } = supabase.storage
+        const { data: urlData } = supabase.storage
           .from('avatars')
           .getPublicUrl(filename);
 
-        console.log('Public URL:', publicUrl);
-        finalPhotoURL = publicUrl;
+        console.log('✅ Step 3: Got public URL:', urlData.publicUrl);
+        finalPhotoURL = urlData.publicUrl;
       }
 
-      console.log('Updating user profile in database...');
+      console.log('🔵 Step 4: Updating user profile in database...');
       // Update user profile in database
       const { error: updateError } = await supabase
         .from('users')
@@ -143,26 +145,29 @@ export default function SettingsPage() {
         .eq('id', user.uid);
 
       if (updateError) {
-        console.error('Database update error:', updateError);
-        throw updateError;
+        console.error('❌ Database update error:', updateError);
+        throw new Error(`Database update failed: ${updateError.message}`);
       }
 
-      console.log('Updating auth metadata...');
-      // Update auth metadata
-      const { error: authError } = await supabase.auth.updateUser({
-        data: {
-          display_name: displayName.trim(),
-          photo_url: finalPhotoURL || ''
-        }
-      });
+      console.log('✅ Step 5: Database updated!');
 
-      if (authError) {
-        console.error('Auth update error:', authError);
-        throw authError;
+      console.log('🔵 Step 6: Updating auth metadata...');
+      // Update auth metadata (non-blocking)
+      try {
+        await supabase.auth.updateUser({
+          data: {
+            display_name: displayName.trim(),
+            photo_url: finalPhotoURL || ''
+          }
+        });
+        console.log('✅ Step 7: Auth metadata updated!');
+      } catch (authErr) {
+        console.warn('⚠️ Auth metadata update failed (non-critical):', authErr);
+        // Continue anyway - database is the source of truth
       }
 
       // Update references in posts and comments to keep avatars consistent
-      console.log('Updating posts and comments...');
+      console.log('🔵 Step 8: Updating posts and comments...');
       try {
         const newName = displayName.trim();
         const newAvatar = finalPhotoURL || '';
@@ -176,24 +181,35 @@ export default function SettingsPage() {
           .from('comments')
           .update({ username: newName, user_avatar: newAvatar })
           .eq('user_id', user.uid);
+
+        console.log('✅ Step 9: Posts/comments updated!');
       } catch (updateErr) {
-        console.warn('Non-critical: Failed to update posts/comments:', updateErr);
+        console.warn('⚠️ Non-critical: Failed to update posts/comments:', updateErr);
         // Non-blocking: if this fails, new posts still show the latest avatar
       }
 
-      console.log('Refreshing user data...');
-      await refreshUser();
+      console.log('🔵 Step 10: Refreshing user data...');
+
+      // Refresh user data (with timeout protection)
+      try {
+        const refreshPromise = refreshUser();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Refresh timeout')), 3000)
+        );
+        await Promise.race([refreshPromise, timeoutPromise]);
+        console.log('✅ Step 11: User data refreshed!');
+      } catch (refreshErr) {
+        console.warn('⚠️ Refresh timed out or failed (non-critical):', refreshErr);
+        // Continue anyway - page reload will show updated data
+      }
 
       // Reset preview flag and update local state
       setHasPreview(false);
       setPhotoURL(finalPhotoURL);
       setFile(null);
 
-      console.log('Profile saved successfully! Redirecting...');
-      // Small delay to ensure state updates
-      setTimeout(() => {
-        router.push('/profile');
-      }, 500);
+      console.log('🎉 SUCCESS! Profile saved! Redirecting to profile...');
+      router.push('/profile');
     } catch (err) {
       console.error('Save error:', err);
       setError(err.message || 'Failed to save changes');
