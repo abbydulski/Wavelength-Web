@@ -5,6 +5,7 @@ const nextConfig = {
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
       { protocol: 'https', hostname: '**.firebasestorage.app' },
       { protocol: 'https', hostname: 'via.placeholder.com' },
+      { protocol: 'https', hostname: '**.supabase.co' }, // Supabase storage
     ],
   },
   webpack: (config) => {

@@ -155,18 +155,24 @@ export default function Feed() {
 
     fetchPosts();
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes with debouncing
+    let debounceTimer;
     const channel = supabase
       .channel('posts-changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'posts' },
         () => {
-          fetchPosts();
+          // Debounce refetch to avoid too many rapid updates
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchPosts();
+          }, 500);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [user]);

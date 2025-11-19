@@ -132,16 +132,20 @@ export default function PostDetailPage() {
     if (!commentText.trim() || !user || !post) return;
     setCommenting(true);
     try {
-      const newComment = {
-        postId: post.id,
-        userId: user.uid,
-        username: user.displayName || 'User',
-        userAvatar: user.photoURL || '',
-        text: commentText.trim(),
-        createdAt: new Date().toISOString(),
-      };
-      await addDoc(collection(db, 'comments'), newComment);
+      const { error } = await supabase
+        .from('comments')
+        .insert({
+          post_id: post.id,
+          user_id: user.uid,
+          username: user.displayName || 'User',
+          user_avatar: user.photoURL || '',
+          text: commentText.trim()
+        });
+
+      if (error) throw error;
       setCommentText('');
+    } catch (err) {
+      console.error('Error adding comment:', err);
     } finally {
       setCommenting(false);
     }
