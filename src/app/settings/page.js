@@ -67,15 +67,16 @@ export default function SettingsPage() {
   const [file, setFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [hasPreview, setHasPreview] = useState(false); // Track if user selected a new photo
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (user) {
+    if (user && !hasPreview) {
       setDisplayName(user.displayName || '');
       setBio(user.bio || '');
       setPhotoURL(user.photoURL || '');
     }
-  }, [user]);
+  }, [user, hasPreview]);
 
   const handleChooseFile = () => fileInputRef.current?.click();
 
@@ -83,6 +84,7 @@ export default function SettingsPage() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
+      setHasPreview(true); // Prevent user data from overwriting preview
       // Show preview immediately
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -182,8 +184,10 @@ export default function SettingsPage() {
       console.log('Refreshing user data...');
       await refreshUser();
 
-      // Update local state immediately for instant feedback
+      // Reset preview flag and update local state
+      setHasPreview(false);
       setPhotoURL(finalPhotoURL);
+      setFile(null);
 
       console.log('Profile saved successfully! Redirecting...');
       // Small delay to ensure state updates
