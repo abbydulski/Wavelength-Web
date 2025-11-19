@@ -151,23 +151,8 @@ export default function SettingsPage() {
 
       console.log('✅ Step 5: Database updated!');
 
-      console.log('🔵 Step 6: Updating auth metadata...');
-      // Update auth metadata (non-blocking)
-      try {
-        await supabase.auth.updateUser({
-          data: {
-            display_name: displayName.trim(),
-            photo_url: finalPhotoURL || ''
-          }
-        });
-        console.log('✅ Step 7: Auth metadata updated!');
-      } catch (authErr) {
-        console.warn('⚠️ Auth metadata update failed (non-critical):', authErr);
-        // Continue anyway - database is the source of truth
-      }
-
       // Update references in posts and comments to keep avatars consistent
-      console.log('🔵 Step 8: Updating posts and comments...');
+      console.log('🔵 Step 6: Updating posts and comments...');
       try {
         const newName = displayName.trim();
         const newAvatar = finalPhotoURL || '';
@@ -182,33 +167,19 @@ export default function SettingsPage() {
           .update({ username: newName, user_avatar: newAvatar })
           .eq('user_id', user.uid);
 
-        console.log('✅ Step 9: Posts/comments updated!');
+        console.log('✅ Step 7: Posts/comments updated!');
       } catch (updateErr) {
         console.warn('⚠️ Non-critical: Failed to update posts/comments:', updateErr);
         // Non-blocking: if this fails, new posts still show the latest avatar
       }
 
-      console.log('🔵 Step 10: Refreshing user data...');
+      console.log('🎉 SUCCESS! Profile saved! Redirecting to profile...');
 
-      // Refresh user data (with timeout protection)
-      try {
-        const refreshPromise = refreshUser();
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Refresh timeout')), 3000)
-        );
-        await Promise.race([refreshPromise, timeoutPromise]);
-        console.log('✅ Step 11: User data refreshed!');
-      } catch (refreshErr) {
-        console.warn('⚠️ Refresh timed out or failed (non-critical):', refreshErr);
-        // Continue anyway - page reload will show updated data
-      }
-
-      // Reset preview flag and update local state
+      // Reset state
       setHasPreview(false);
-      setPhotoURL(finalPhotoURL);
       setFile(null);
 
-      console.log('🎉 SUCCESS! Profile saved! Redirecting to profile...');
+      // Redirect immediately
       router.push('/profile');
     } catch (err) {
       console.error('Save error:', err);
