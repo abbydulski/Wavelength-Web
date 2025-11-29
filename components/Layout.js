@@ -47,18 +47,23 @@ export default function Layout({ children }) {
 
     fetchPendingCount();
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes with debouncing
+    let debounceTimer;
     const channel = supabase
       .channel('follow-requests-count')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'follow_requests', filter: `to_user_id=eq.${user.id}` },
         () => {
-          fetchPendingCount();
+          clearTimeout(debounceTimer);
+          debounceTimer = setTimeout(() => {
+            fetchPendingCount();
+          }, 500);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(debounceTimer);
       supabase.removeChannel(channel);
     };
   }, [user]);
