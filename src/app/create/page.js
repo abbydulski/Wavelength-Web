@@ -255,9 +255,25 @@ function LocationPicker({
         // Normalize common brand shortcuts
         const normalizeBrand = (text) => {
           const t = text.toLowerCase().trim();
+          // Fitness
           if (t.startsWith('24 hour')) return '24 Hour Fitness';
           if (t.includes('24hr')) return '24 Hour Fitness';
           if (t === 'planet' || t.startsWith('planet fit')) return 'Planet Fitness';
+          // Coffee
+          if (t === 'philz' || t.startsWith('philz ')) return 'Philz Coffee';
+          if (t === 'peets' || t === 'peet' || t.startsWith('peets ') || t.startsWith('peet ')) return "Peet's Coffee";
+          if (t === 'starbucks' || t === 'sbux') return 'Starbucks';
+          if (t === 'bluebottle' || t === 'blue bottle') return 'Blue Bottle Coffee';
+          if (t === 'dunkin') return 'Dunkin';
+          // Fast food
+          if (t === 'mcdonalds' || t === 'mcd' || t === 'mcds') return "McDonald's";
+          if (t === 'chipotle' || t === 'chip') return 'Chipotle';
+          if (t === 'chickfila' || t === 'chick fil a') return 'Chick-fil-A';
+          // Retail
+          if (t === 'target' || t === 'tgt') return 'Target';
+          if (t === 'walmart' || t === 'wmt') return 'Walmart';
+          if (t === 'wholefoods' || t === 'whole foods') return 'Whole Foods';
+          if (t === 'traderjoes' || t === 'trader joes' || t === 'tj') return "Trader Joe's";
           return text;
         };
         const nq = normalizeBrand(q);
