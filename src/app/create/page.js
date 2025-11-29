@@ -291,25 +291,38 @@ function LocationPicker({
             bboxParam = `&bbox=${minLon},${minLat},${maxLon},${maxLat}`; // minLon,minLat,maxLon,maxLat
           }
 
+          // Helper to filter out street addresses (only keep POIs)
+          const filterPOIs = (features) => {
+            return features.filter(f => {
+              // Keep if it has POI type
+              const types = f.place_type || [];
+              if (types.includes('poi')) return true;
+              // Reject if it's just an address
+              if (types.includes('address') && !types.includes('poi')) return false;
+              return true;
+            });
+          };
+
           // Pass 1: strict POIs nearby
-          const url1 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
+          const url1 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq)}.json?access_token=${MAPBOX_TOKEN}&limit=10&types=poi${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
           let res = await fetch(url1, { signal: controller.signal });
           if (res.ok) {
             const data = await res.json();
-            results = (data.features || []).map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
+            const pois = filterPOIs(data.features || []);
+            results = pois.map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
           }
-          // Pass 2: poi + address
-          if (results.length === 0) {
-            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
+          // Pass 2: if no POIs found, try original query (not normalized)
+          if (results.length === 0 && nq !== q) {
+            const url2 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${MAPBOX_TOKEN}&limit=10&types=poi,address${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
             res = await fetch(url2, { signal: controller.signal });
             if (res.ok) {
               const data2 = await res.json();
               results = (data2.features || []).map((f) => ({ name: f.place_name, lat: f.center?.[1], lon: f.center?.[0] }));
             }
           }
-          // Pass 3: brand + city hint
-          if (results.length === 0 && localCity) {
-            const url3 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq + ' ' + localCity)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${localCountry ? `&country=${localCountry}` : ''}`;
+          // Pass 3: if still no results, allow addresses
+          if (results.length === 0) {
+            const url3 = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(nq)}.json?access_token=${MAPBOX_TOKEN}&limit=8&types=poi,address${bboxParam}${userLocation ? `&proximity=${userLocation.lon},${userLocation.lat}` : ''}${localCountry ? `&country=${localCountry}` : ''}`;
             res = await fetch(url3, { signal: controller.signal });
             if (res.ok) {
               const data3 = await res.json();
